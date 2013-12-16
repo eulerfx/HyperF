@@ -112,22 +112,13 @@ module Routing =
     open EkonBenefits.FSharp.Dynamic
 
 
-    type Route = IsMatch * (HttpReq * RouteInfo -> Async<HttpResponse>)
+    type Route = HttpReq * RouteInfo -> Async<HttpResponse> option
 
     and RouteInfo = { 
         path   : string
         values : obj }
 
     and IsMatch = HttpReq * RouteInfo -> bool
-        
-
-    let decodeModel (service:HttpReq * RouteInfo * 'a -> Async<HttpResponse>) =
-        fun (req,ri) ->
-            let a = Unchecked.defaultof<'a> // TODO: decode via content headers, or decode via filter into value?
-            service (req,ri,a)
-
-        
-    let (^) = decodeModel
 
 
     module RouteInfos =
@@ -145,15 +136,38 @@ module Routing =
             { path   = req.url.AbsolutePath
               values = values }   
 
-    let private exec (req,ri) (route:Route) =
-         let matches,service = route
-         if matches (req,ri) then service (req,ri) |> Some
-         else None
+
+    let identity : Route = fun (req,ri) -> None
+
+    let append (r1:Route) (r2:Route) =
+        fun (req,ri) -> 
+            match r1 (req,ri) with
+            | Some res -> res |> Some
+            | None ->
+                match r2 (req,ri) with
+                | Some res -> res |> Some
+                | None -> None           
+
+    let ofMatch (m:IsMatch) service = 
+        fun (req,ri) ->
+            if m (req,ri) then service (req,ri) |> Some
+            else None
+
+    let decodeModel (service:HttpReq * RouteInfo * 'a -> Async<HttpResponse>) =
+        fun (req,ri) ->
+            let a = Unchecked.defaultof<'a> // TODO: decode via content headers, or decode via filter into value?
+            service (req,ri,a)
+
+        
+    let (^) = decodeModel
 
     let toService (routes:seq<Route>) =
-        fun (req:HttpRequest) ->
+        fun (req:HttpRequest) ->            
+            let route = routes |> Seq.fold append identity
             let ri = RouteInfos.parse req
-            routes |> Seq.pick (exec (req,ri))
+            match route (req,ri) with
+            | Some res -> res
+            | None _ -> failwith "No matching route!"
 
 
     module Match =        
@@ -163,6 +177,8 @@ module Routing =
         let And (m1:IsMatch) (m2:IsMatch) = fun a -> (m1 a && m2 a)
 
         let (&&&) = And
+
+        let Or (m1:IsMatch) (m2:IsMatch) = fun a -> (m1 a || m2 a)
 
         let pathExact (path:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase path ri.path                
 
@@ -184,14 +200,14 @@ module Routing =
 
     let prefix prefix route = 
         let isMatch,service = route in
-        (Match.prefix prefix isMatch),service
+        ofMatch (Match.prefix prefix isMatch) service
 
 
 module Http =
 
     open Routing
 
-    let inline private methodPath methodMatch path = tuple (methodMatch |> Match.And <| Match.pathExact path)
+    let inline private methodPath methodMatch path = ofMatch (methodMatch |> Match.And <| Match.pathExact path)
 
 
     let get path = methodPath Routing.Match.get path    
@@ -222,7 +238,7 @@ module Http =
         
 
 
-    let all service = (Routing.Match.ALL,service)
+    let all service = ofMatch (Routing.Match.ALL) service
              
 
 
