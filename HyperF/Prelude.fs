@@ -5,6 +5,8 @@ module Prelude =
     
     let flip f a b = f b a
 
+    let tuple a b = (a,b)
+
 
 module Cont = 
 

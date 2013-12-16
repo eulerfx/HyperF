@@ -2,6 +2,7 @@
 
 open System
 open System.IO
+open System.Text
 
 
 
@@ -56,29 +57,25 @@ module HttpResponses =
     
     let private lift (response:HttpResponse) = Async.unit response
 
-
     let echo (request:HttpRequest) = {
         headers = request.headers
         body = request.body |> IO.echo }
-
 
     let fromContentTypeAndStream (contentType:string) (stream:Stream) =
         { headers = Map.empty
           body = stream } |> lift
 
     let fromContentTypeAndBytes (contentType:string) (bytes:byte array) = fromContentTypeAndStream contentType (new MemoryStream(bytes))
+    
+    let plainText (str:string) = fromContentTypeAndBytes "text/plain" (Encoding.UTF8.GetBytes(str))
 
+    let file path = fromContentTypeAndStream "text/plain" (File.OpenRead(path))
 
     open Newtonsoft.Json
-    open System.Text
-
-
+    
     let json (obj:obj) =        
         let json = JsonConvert.SerializeObject(obj) in
         fromContentTypeAndBytes "application/json" (Encoding.UTF8.GetBytes(json))
-
-
-    let plainText (str:string) = fromContentTypeAndBytes "text/plain" (Encoding.UTF8.GetBytes(str))
 
 
     module Jade =
@@ -112,57 +109,71 @@ module HttpServices =
 
 module Routing =
 
-    open System.Dynamic
     open EkonBenefits.FSharp.Dynamic
 
-    type Route = HttpRequest * RouteInfo -> Async<HttpResponse> option
+
+    type Route = IsMatch * (HttpReq * RouteInfo -> Async<HttpResponse>)
 
     and RouteInfo = { 
         path   : string
         values : obj }
 
-    and Match = HttpRequest * RouteInfo -> bool
+    and IsMatch = HttpReq * RouteInfo -> bool
+        
+
+    let decodeModel (service:HttpReq * RouteInfo * 'a -> Async<HttpResponse>) =
+        fun (req,ri) ->
+            let a = Unchecked.defaultof<'a> // TODO: decode via content headers, or decode via filter into value?
+            service (req,ri,a)
+
+        
+    let (^) = decodeModel
 
 
     module RouteInfos =
     
-        let get (request:HttpRequest) = 
-            let path = request.url.AbsolutePath
-            
-            let values = new ExpandoObject() :> obj
-            values?path <- path
-            values?query <- request.url.Query
+        let prefix prefix (ri) = { ri with path = prefix + ri.path }
 
-            { path   = request.url.AbsolutePath
+        let parse (req:HttpReq) = 
+
+            let path = req.url.AbsolutePath
+            
+            let values = new System.Dynamic.ExpandoObject()
+            values?path <- path
+            values?query <- req.url.Query
+
+            { path   = req.url.AbsolutePath
               values = values }   
 
+    let private exec (req,ri) (route:Route) =
+         let matches,service = route
+         if matches (req,ri) then service (req,ri) |> Some
+         else None
 
-    let route (matcher:Match) (service:HttpReq -> RouteInfo -> Async<HttpResponse>) =
-        fun (request,routeInfo) ->
-            if matcher (request,routeInfo) then service request routeInfo |> Some
-            else None                
+    let toService (routes:seq<Route>) =
+        fun (req:HttpRequest) ->
+            let ri = RouteInfos.parse req
+            routes |> Seq.pick (exec (req,ri))
 
 
-    let toService (routes:seq<Route>) (req:HttpRequest) = 
-        let routeInfo = RouteInfos.get req
-        routes |> Seq.pick (fun route -> route (req,routeInfo))
-
-
-    module Matches =        
-
-        let And (m1:Match) (m2:Match) = fun a -> (m1 a && m2 a)
-
-        let (&&&) (m1:Match) (m2:Match) = fun a -> (m1 a && m2 a)
-
-        //let appendOr (m1:Matcher) (m2:Matcher) = fun a -> (m1 a || m2 a)
-
-        let pathEq (path:string) (request:HttpRequest,routeInfo:RouteInfo) = Strings.equalToIgnoreCase path request.url.AbsolutePath        
+    module Match =        
 
         let ALL _ = true
 
-        let httpMethod (httpMethod:string) (request:HttpRequest,routeInfo:RouteInfo) = Strings.equalToIgnoreCase httpMethod request.httpMethod
+        let And (m1:IsMatch) (m2:IsMatch) = fun a -> (m1 a && m2 a)
 
-        let get = (httpMethod "GET") //&&& (pathEq path)
+        let (&&&) = And
+
+        let pathExact (path:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase path ri.path                
+
+        let prefix (prefix:string) (m:IsMatch) : IsMatch = 
+            fun (req,ri) -> 
+                let ri = ri |> RouteInfos.prefix prefix
+                m (req,ri) 
+
+        let httpMethod (httpMethod:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase httpMethod req.httpMethod
+
+        let get = httpMethod "GET"
         
         let put = httpMethod "PUT"
 
@@ -171,26 +182,32 @@ module Routing =
         let post = httpMethod "POST"
 
 
+    let prefix prefix route = 
+        let isMatch,service = route in
+        (Match.prefix prefix isMatch),service
+
 
 module Http =
 
     open Routing
 
-    let inline private methodPath methodMatch path = Routing.route (methodMatch |> Matches.And <| Matches.pathEq path)
+    let inline private methodPath methodMatch path = tuple (methodMatch |> Match.And <| Match.pathExact path)
 
 
-    let get path = methodPath Routing.Matches.get path
-    
+    let get path = methodPath Routing.Match.get path    
     /// HTTP GET
     let (=>>) = get
 
-    let put path = methodPath Matches.put path
+    let (^=>>) path service = methodPath Routing.Match.get path (service |> Routing.decodeModel)
+
+
+    let put path = methodPath Match.put path
     let (==>) = put
 
-    let delete path = methodPath Matches.delete path
+    let delete path = methodPath Match.delete path
     let (-=>) = delete
 
-    let post path = methodPath Matches.post path
+    let post path = methodPath Match.post path
     let (!=>) = post
 
 
@@ -198,14 +215,14 @@ module Http =
 
     let (=>) httpMethodRoute = 
         match httpMethodRoute with
-        | Get path -> methodPath Matches.get path
-        | Put path -> methodPath Matches.put path
-        | Post path -> methodPath Matches.post path
-        | Delete path -> methodPath Matches.delete path
+        | Get path -> methodPath Match.get path
+        | Put path -> methodPath Match.put path
+        | Post path -> methodPath Match.post path
+        | Delete path -> methodPath Match.delete path
         
 
 
-    let all service = Routing.route (Routing.Matches.ALL) service
+    let all service = (Routing.Match.ALL,service)
              
 
 
@@ -260,16 +277,16 @@ module Http =
                 body = ctx.Request.InputStream }
 
             let! response = service request
-            do! response.body.CopyToAsync(ctx.Response.OutputStream) |> Async.AwaitIAsyncResult |> Async.Ignore }
+            do! response.body.CopyToAsync(ctx.Response.OutputStream) |> Async.AwaitIAsyncResult |> Async.Ignore
+            ctx.Response.OutputStream.Dispose()
+            ctx.Response.Close() }
 
         let ct = CancellationToken.None
 
         let worker = async {
             while not <| ct.IsCancellationRequested do
                 let! ctx = listener.GetContextAsync() |> Async.AwaitTask
-                do! proc ctx
-                ctx.Response.Close() 
-            }
+                do! proc ctx }
 
         printfn "Starting server..."
 
