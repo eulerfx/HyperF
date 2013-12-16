@@ -139,14 +139,7 @@ module Routing =
 
     let identity : Route = fun (req,ri) -> None
 
-    let append (r1:Route) (r2:Route) =
-        fun (req,ri) -> 
-            match r1 (req,ri) with
-            | Some res -> res |> Some
-            | None ->
-                match r2 (req,ri) with
-                | Some res -> res |> Some
-                | None -> None           
+    let append (r1:Route) (r2:Route) = fun req -> [r1;r2] |> Seq.tryPick (fun route -> route req)
 
     let ofMatch (m:IsMatch) service = 
         fun (req,ri) ->
