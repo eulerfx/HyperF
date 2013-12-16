@@ -8,18 +8,20 @@ module IO =
 
     let returnIO = IO
 
-    let bind (io:'a IO) (k:'a -> 'b IO) = let (IO(value)) = io in k value
+    let unitIO = returnIO ()
 
-    let map f (io:'a IO) = let (IO(value)) = io in f value |> returnIO
+    let extract io = let (IO(value)) = io in value
 
-    let apply (f:('a -> 'b) IO) (io:'a IO) = 
-        let (IO(f)) = f in
-        let (IO(value)) = io in
-        f value |> returnIO
+    let bind (io:'a IO) (k:'a -> 'b IO) = let value = extract io in k value
 
-    //let delay (f:unit -> 'a IO) = f()
+    let map f (io:'a IO) = let value = extract io in f value |> returnIO
 
-    //let append (a:'a IO) (b:'a IO) = b
+    let merge io1 io2 =
+        let value1 = extract io1 in
+        let value2 = extract io2 in
+        returnIO (value1,value2)
+
+    let apply (f:('a -> 'b) IO) (io:'a IO) = let (IO(f,value)) = merge f io in f value |> returnIO
 
     let lift f a = f a |> IO
 

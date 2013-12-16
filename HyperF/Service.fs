@@ -8,27 +8,38 @@ type Filter<'TRequest, 'TResponse> = 'TRequest -> Service<'TRequest, 'TResponse>
 
 module Filters =
 
+    open Async
+
     let identity req (service:Service<_,_>) = service req
 
-    let andThen (f2:Filter<_,_>) (f1:Filter<_,_>) req = Cont.bind (f1 req) f2
+    let andThen (f2:Filter<_,_>) (f1:Filter<_,_>) : Filter<_,_> = fun req -> Cont.bind (f1 req) f2
 
-    let request (filter:Filter<_,_>) (service:Service<_,_>) = fun req -> filter req service
+    //let map f req (service:Service<_,_>) = f req |> service
 
-    let ofEndo (endo:'a -> 'a) (req:'a) (service:Service<_,_>) = endo req |> service        
+    let before before req (service:Service<_,_>) = before req >>= (fun () -> service req)
 
-    let printfnF req (service:Service<_,_>) =
-        printfn "before"
-        let r = req |> service
-        printfn "after"
-        r
+    let after after req (service:Service<_,_>) = async {
+        let! res = service req
+        do! after (req,res)
+        return res }
 
-    let sleepBefore ms req (service:Service<_,_>) = async {
-        do! Async.Sleep(ms)
-        return! service req }
+    let beforeAfter before after req (service:Service<_,_>) = async { 
+        do! before req
+        let! res = service req
+        do! after (req,res)
+        return res }
+        
+    let private beforeAfterSync before after req (service:Service<_,_>) = async { 
+        do before req
+        let! res = service req
+        do after (req,res)
+        return res }                       
 
     let timeOut ts req (service:Service<_,_>) = req |> service |> Futures.withTimeout ts
 
     let timeOutMs ms = timeOut (System.TimeSpan.FromMilliseconds(ms))
+
+    let printfnF req service = beforeAfterSync (fun _ -> printfn "before") (fun _ -> printfn "after") req service
 
 
 module Services =

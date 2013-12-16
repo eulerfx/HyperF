@@ -30,27 +30,62 @@ type HttpFilter = Filter<HttpRequest, HttpResponse>
 type HttpResponseFilter = HttpResponse -> Service<HttpRequest, HttpResponse> -> Async<HttpResponse>
 
 
+
+type HttpAuthReq = HttpAuthReq of HttpReq * user:string
+
+
+
+
 module HttpFilters =
+
+    open Async
 
     let response (filter:HttpResponseFilter) (service:HttpService) : HttpService = 
         fun req -> async { let! res = service req in return! filter res service }
                      
+    let authReq (req:HttpReq) = async { return HttpAuthReq(req,"foo@bar") }
+
+    let auth req service = authReq req >>= service
+
+    let context provider req service = (req,provider req) |> service
+
+    let dynamicContext req service = context (fun _ -> new System.Dynamic.ExpandoObject() :> obj) req service
 
 
 module HttpResponses =
     
-    let lift (response:HttpResponse) = Async.unit response
+    let private lift (response:HttpResponse) = Async.unit response
+
 
     let echo (request:HttpRequest) = {
         headers = request.headers
         body = request.body |> IO.echo }
 
-    module PlainText =
-        open System.Text
 
-        let ofStr (str:string) = 
-            { headers = Map.empty
-              body = new MemoryStream(Encoding.UTF8.GetBytes(str)) } |> lift           
+    let fromContentTypeAndStream (contentType:string) (stream:Stream) =
+        { headers = Map.empty
+          body = stream } |> lift
+
+    let fromContentTypeAndBytes (contentType:string) (bytes:byte array) = fromContentTypeAndStream contentType (new MemoryStream(bytes))
+
+
+    open Newtonsoft.Json
+    open System.Text
+
+
+    let json (obj:obj) =        
+        let json = JsonConvert.SerializeObject(obj) in
+        fromContentTypeAndBytes "application/json" (Encoding.UTF8.GetBytes(json))
+
+
+    let plainText (str:string) = fromContentTypeAndBytes "text/plain" (Encoding.UTF8.GetBytes(str))
+
+
+    module Jade =
+        
+        let view viewName viewData = 0
+
+
 
 
 module HttpRequests =
@@ -67,7 +102,7 @@ module HttpRequests =
 
 module HttpServices =    
 
-    let helloWorld (req:HttpRequest) = HttpResponses.PlainText.ofStr "hello world"
+    let helloWorld _ = HttpResponses.plainText "hello world"
 
     let echo = HttpResponses.echo >> Async.unit
 
@@ -77,21 +112,35 @@ module HttpServices =
 
 module Routing =
 
+    open System.Dynamic
+    open EkonBenefits.FSharp.Dynamic
+
     type Route = HttpRequest * RouteInfo -> Async<HttpResponse> option
 
-    and RouteInfo = { path : string }
+    and RouteInfo = { 
+        path   : string
+        values : obj }
 
-    and Matcher = HttpRequest * RouteInfo -> bool
+    and Match = HttpRequest * RouteInfo -> bool
 
 
     module RouteInfos =
     
-        let get (request:HttpRequest) = { path = request.url.AbsolutePath }   
+        let get (request:HttpRequest) = 
+            let path = request.url.AbsolutePath
+            
+            let values = new ExpandoObject() :> obj
+            values?path <- path
+            values?query <- request.url.Query
+
+            { path   = request.url.AbsolutePath
+              values = values }   
 
 
-    let route (matcher:Matcher) (service:HttpService) (request,routeInfo) = 
-        if matcher (request,routeInfo) then service request |> Some
-        else None                
+    let route (matcher:Match) (service:HttpReq -> RouteInfo -> Async<HttpResponse>) =
+        fun (request,routeInfo) ->
+            if matcher (request,routeInfo) then service request routeInfo |> Some
+            else None                
 
 
     let toService (routes:seq<Route>) (req:HttpRequest) = 
@@ -101,26 +150,65 @@ module Routing =
 
     module Matches =        
 
-        let (&&&) (m1:Matcher) (m2:Matcher) = fun a -> (m1 a && m2 a)
+        let And (m1:Match) (m2:Match) = fun a -> (m1 a && m2 a)
+
+        let (&&&) (m1:Match) (m2:Match) = fun a -> (m1 a && m2 a)
 
         //let appendOr (m1:Matcher) (m2:Matcher) = fun a -> (m1 a || m2 a)
 
-        let pathEq (path:string) (request:HttpRequest,routeInfo:RouteInfo) = Strings.equalToIgnoreCase path request.url.AbsolutePath
-
-        let httpMethod (httpMethod:string) (request:HttpRequest,routeInfo:RouteInfo) = Strings.equalToIgnoreCase httpMethod request.httpMethod
+        let pathEq (path:string) (request:HttpRequest,routeInfo:RouteInfo) = Strings.equalToIgnoreCase path request.url.AbsolutePath        
 
         let ALL _ = true
 
-        let get path = (httpMethod "GET") &&& (pathEq path)        
+        let httpMethod (httpMethod:string) (request:HttpRequest,routeInfo:RouteInfo) = Strings.equalToIgnoreCase httpMethod request.httpMethod
+
+        let get = (httpMethod "GET") //&&& (pathEq path)
+        
+        let put = httpMethod "PUT"
+
+        let delete = httpMethod "DELETE"
+
+        let post = httpMethod "POST"
 
 
 
 module Http =
 
-    let get path = Routing.route (Routing.Matches.get path)
+    open Routing
 
-    let all = Routing.route (Routing.Matches.ALL)
+    let inline private methodPath methodMatch path = Routing.route (methodMatch |> Matches.And <| Matches.pathEq path)
+
+
+    let get path = methodPath Routing.Matches.get path
+    
+    /// HTTP GET
+    let (=>>) = get
+
+    let put path = methodPath Matches.put path
+    let (==>) = put
+
+    let delete path = methodPath Matches.delete path
+    let (-=>) = delete
+
+    let post path = methodPath Matches.post path
+    let (!=>) = post
+
+
+    type HttpMethodRoute = Get of path:string | Put of string | Post of string | Delete of string
+
+    let (=>) httpMethodRoute = 
+        match httpMethodRoute with
+        | Get path -> methodPath Matches.get path
+        | Put path -> methodPath Matches.put path
+        | Post path -> methodPath Matches.post path
+        | Delete path -> methodPath Matches.delete path
+        
+
+
+    let all service = Routing.route (Routing.Matches.ALL) service
              
+
+
 
     open System.Net
     open System.Net.Http
@@ -149,13 +237,17 @@ module Http =
                 headers = Map.empty
                 body = repBody } 
             }
-            
+    
+    let client baseUrl = 
+        let httpClient = new HttpClient()
+        httpClient.BaseAddress <- baseUrl
+        ofClient httpClient        
 
 
-    let host (service:HttpService) = async {
+    let host uriPrefix (service:HttpService) = async {
 
         let listener = new HttpListener()
-        listener.Prefixes.Add("http://localhost:8081/")
+        listener.Prefixes.Add(uriPrefix)
         listener.AuthenticationSchemes <- AuthenticationSchemes.Anonymous
         listener.Start()
 
