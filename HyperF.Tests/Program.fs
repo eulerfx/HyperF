@@ -22,9 +22,8 @@ let main argv =
                 return! HttpRes.plainText "GETv3" }
 
         All => (fun _ -> HttpRes.plainText "ALL")
-
-    ]   
-
+    ]       
+         
     let routeService = routes |> Route.toService
 
     let service = 
@@ -35,6 +34,5 @@ let main argv =
     Http.host "http://localhost:8081/" service |> Async.RunSynchronously
     
     //let nullProxy = Http.host (Http.client (Uri("http://www.google.com")))
-
     
     0

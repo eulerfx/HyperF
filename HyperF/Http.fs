@@ -138,7 +138,7 @@ module Route =
 
     let append (r1:Route) (r2:Route) = fun req -> [r1;r2] |> Seq.tryPick (fun route -> route req)
 
-    let ofMatch (m:IsMatch) service = 
+    let fromMatch (m:IsMatch) service = 
         fun (req,ri) ->
             if m (req,ri) then service (req,ri) |> Some
             else None
@@ -151,7 +151,7 @@ module Route =
     let (^) = model
 
     let toService (routes:seq<Route>) =
-        fun (req:HttpRequest) ->            
+        fun (req:HttpReq) ->            
             let route = routes |> Seq.fold append identity
             let ri = RouteInfos.parse req
             match route (req,ri) with
@@ -189,22 +189,22 @@ module Route =
 
     let prefix prefix route = 
         let isMatch,service = route in
-        ofMatch (Match.prefix prefix isMatch) service
+        fromMatch (Match.prefix prefix isMatch) service
 
 
 module Http =
 
-    let inline private methodPath methodMatch path = Route.ofMatch (methodMatch |> Route.Match.And <| Route.Match.pathExact path)
+    let inline private methodPath methodMatch path service = Route.fromMatch (methodMatch |> Route.Match.And <| Route.Match.pathExact path) service
 
     type RouteMatchCode = Get of path:string | Put of string | Post of string | Delete of string | All
 
-    let (=>) = function
-        | Get path    -> methodPath Route.Match.get path
-        | Put path    -> methodPath Route.Match.put path
-        | Post path   -> methodPath Route.Match.post path
-        | Delete path -> methodPath Route.Match.delete path
-        | All         -> Route.ofMatch (Route.Match.ALL)       
-
+    let (=>) code service = 
+        match code with
+        | Get path    -> methodPath Route.Match.get path service
+        | Put path    -> methodPath Route.Match.put path service
+        | Post path   -> methodPath Route.Match.post path service
+        | Delete path -> methodPath Route.Match.delete path service
+        | All         -> Route.fromMatch Route.Match.ALL service
 
     open System.Net
     open System.Net.Http
