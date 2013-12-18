@@ -120,8 +120,6 @@ module Route =
 
     module RouteInfos =
     
-        let prefix prefix (ri) = { ri with path = prefix + ri.path }
-
         let parse (req:HttpReq) = 
 
             let path = req.url.AbsolutePath
@@ -158,7 +156,6 @@ module Route =
             | Some res -> res
             | None _ -> failwith "No matching route!"
 
-
     module Match =        
 
         let ALL _ = true
@@ -171,11 +168,6 @@ module Route =
 
         let pathExact (path:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase path ri.path                
 
-        let prefix (prefix:string) (m:IsMatch) : IsMatch = 
-            fun (req,ri) -> 
-                let ri = ri |> RouteInfos.prefix prefix
-                m (req,ri) 
-
         let httpMethod (httpMethod:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase httpMethod req.httpMethod
 
         let get = httpMethod "GET"
@@ -187,24 +179,45 @@ module Route =
         let post = httpMethod "POST"
 
 
-    let prefix prefix route = 
-        let isMatch,service = route in
-        fromMatch (Match.prefix prefix isMatch) service
-
-
 module Http =
 
     let inline private methodPath methodMatch path service = Route.fromMatch (methodMatch |> Route.Match.And <| Route.Match.pathExact path) service
 
-    type RouteMatchCode = Get of path:string | Put of string | Post of string | Delete of string | All
+    type RouteMatchPattern = Get of path:string | Put of string | Post of string | Delete of string | All
 
-    let (=>) code service = 
+    let nestRoute code parentCode =
+        match parentCode,code with
+        | Get pp,Get p -> Get(pp + p)
+        | Put pp,Put p -> Put(pp + p)
+        | Post pp,Post p -> Post(pp + p)
+        | Delete pp,Delete p -> Delete(pp + p)
+        | All,Get p -> Get(p)
+        | All,Put p -> Get(p)
+        | All,Post p -> Get(p)
+        | All,Delete p -> Get(p)
+        | _,All   -> All
+        | _ -> failwith "Invalid route!"
+
+    let (=>) code service = (code,service)
+
+    let inline bindService code service = 
         match code with
         | Get path    -> methodPath Route.Match.get path service
         | Put path    -> methodPath Route.Match.put path service
         | Post path   -> methodPath Route.Match.post path service
         | Delete path -> methodPath Route.Match.delete path service
         | All         -> Route.fromMatch Route.Match.ALL service
+
+    let toService routes =        
+        routes
+        |> Seq.map (bindService |> uncurry)
+        |> Route.toService  
+    
+
+    let nest parentCode = Seq.map (fun (code,service) -> (nestRoute code parentCode),service)
+            
+    let (==>) code routes = nest code routes
+
 
     open System.Net
     open System.Net.Http
