@@ -1,33 +1,30 @@
 ﻿namespace HyperF
 
+type Service<'Req, 'Res> = 'Req -> Async<'Res>
 
-type Service<'TRequest, 'TResponse> = 'TRequest -> Async<'TResponse>
+type Filter<'Req, 'Req2, 'Res2, 'Res> = 'Req -> Service<'Req2, 'Res2> -> Async<'Res>
 
-type Filter<'TRequest, 'TResponse> = 'TRequest -> Service<'TRequest, 'TResponse> -> Async<'TResponse>
+type Filter<'Req, 'Res> = Filter<'Req, 'Req, 'Res, 'Res>
 
-
-module Filters =
+module Filter =
 
     open Async
 
     let identity req (service:Service<_,_>) = service req
 
-    let andThen (f2:Filter<_,_>) (f1:Filter<_,_>) : Filter<_,_> = fun req -> Cont.bind (f1 req) f2
+    let combine (f2:Filter<_,_,_,_>) (f1:Filter<_,_,_,_>) : Filter<_,_,_,_> = fun req -> Cont.bind (f1 req) f2
 
-    //let map f req (service:Service<_,_>) = f req |> service
+    let fromMap mapReq mapRes =
+        fun req (service:Service<_,_>) -> async {
+            let! req' = mapReq req
+            let! res = service req'
+            return! mapRes res }
+        
+    let fromMapReq mapReq req (service:Service<_,_>) = mapReq req >>= (fun req -> service req)
 
-    let before before req (service:Service<_,_>) = before req >>= (fun () -> service req)
+    let fromMapReqSync mapReq req (service:Service<_,_>) = req |> mapReq |> service
 
-    let after after req (service:Service<_,_>) = async {
-        let! res = service req
-        do! after (req,res)
-        return res }
-
-    let beforeAfter before after req (service:Service<_,_>) = async { 
-        do! before req
-        let! res = service req
-        do! after (req,res)
-        return res }
+    let fromMapRes mapRes req (service:Service<_,_>) = service req >>= (fun res -> mapRes res)
         
     let private beforeAfterSync before after req (service:Service<_,_>) = async { 
         do before req
@@ -41,9 +38,4 @@ module Filters =
 
     let printfnF req service = beforeAfterSync (fun _ -> printfn "before") (fun _ -> printfn "after") req service
 
-
-module Services =
-    
-    let lift (service:'a -> 'b) = service >> Async.unit
-
-    let andThen (service:Service<_,_>) (filter:Filter<_,_>) = fun req -> service |> (filter req)
+    let toService (service:Service<_,_>) (filter:Filter<_,_,_,_>) = fun req -> service |> (filter req)

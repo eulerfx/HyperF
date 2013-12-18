@@ -21,14 +21,7 @@ type HttpResponse = {
     body : Stream
 }
 
-and HttpRep = HttpResponse
-
-
-type HttpService = Service<HttpRequest, HttpResponse>
-
-type HttpFilter = Filter<HttpRequest, HttpResponse>
-
-type HttpResponseFilter = HttpResponse -> Service<HttpRequest, HttpResponse> -> Async<HttpResponse>
+and HttpResp = HttpResponse
 
 
 
@@ -36,26 +29,9 @@ type HttpAuthReq = HttpAuthReq of HttpReq * user:string
 
 
 
-
-module HttpFilters =
-
-    open Async
-
-    let response (filter:HttpResponseFilter) (service:HttpService) : HttpService = 
-        fun req -> async { let! res = service req in return! filter res service }
-                     
-    let authReq (req:HttpReq) = async { return HttpAuthReq(req,"foo@bar") }
-
-    let auth req service = authReq req >>= service
-
-    let context provider req service = (req,provider req) |> service
-
-    let dynamicContext req service = context (fun _ -> new System.Dynamic.ExpandoObject() :> obj) req service
-
-
-module HttpResponses =
+module HttpRes =
     
-    let private lift (response:HttpResponse) = Async.unit response
+    let private lift (response:HttpResp) = Async.unit response
 
     let echo (request:HttpRequest) = {
         headers = request.headers
@@ -85,34 +61,55 @@ module HttpResponses =
 
 
 
-module HttpRequests =
-    
-    open System.Text
-
-    let toString (request:HttpRequest) = 
-        use sr = new StreamReader(request.body)
-        sr.ReadToEndAsync()
 
 
 
+module HttpService =    
 
+    let helloWorld _ = HttpRes.plainText "hello world"
 
-module HttpServices =    
-
-    let helloWorld _ = HttpResponses.plainText "hello world"
-
-    let echo = HttpResponses.echo >> Async.unit
+    let echo = HttpRes.echo >> Async.unit
 
 
   
+module HttpFilter =
+
+    open Async
+                     
+    let authReq (req:HttpReq) = async { return HttpAuthReq(req,"foo@bar") }
+
+    let auth req service = authReq req >>= service
+
+    let context provider = Filter.fromMapReqSync (fun req -> req,provider req)
+
+    module Json =
+
+        open Newtonsoft.Json
+
+        let private jsonSer = new JsonSerializer()
+
+        let private decodeDynamic (req:HttpReq) = 
+            let sr = new StreamReader(req.body)
+            jsonSer.Deserialize(sr, typeof<System.Dynamic.DynamicObject>)
+
+        let private encode obj =             
+            let s = new MemoryStream()
+            let sw = new StreamWriter(s)
+            jsonSer.Serialize(sw,obj)
+            HttpRes.fromContentTypeAndStream "application/json" s
+
+        let dynamic = 
+            Filter.fromMap 
+                (fun (req:HttpReq) -> (req,(decodeDynamic req)) |> Async.unit) 
+                (fun (res:obj) -> res |> HttpRes.json)
 
 
-module Routing =
+module Route =
 
     open EkonBenefits.FSharp.Dynamic
 
 
-    type Route = HttpReq * RouteInfo -> Async<HttpResponse> option
+    type Route = HttpReq * RouteInfo -> Async<HttpResp> option
 
     and RouteInfo = { 
         path   : string
@@ -146,13 +143,12 @@ module Routing =
             if m (req,ri) then service (req,ri) |> Some
             else None
 
-    let decodeModel (service:HttpReq * RouteInfo * 'a -> Async<HttpResponse>) =
+    let model (service:HttpReq * RouteInfo * 'a -> Async<HttpResponse>) =
         fun (req,ri) ->
             let a = Unchecked.defaultof<'a> // TODO: decode via content headers, or decode via filter into value?
             service (req,ri,a)
-
         
-    let (^) = decodeModel
+    let (^) = model
 
     let toService (routes:seq<Route>) =
         fun (req:HttpRequest) ->            
@@ -198,42 +194,16 @@ module Routing =
 
 module Http =
 
-    open Routing
+    let inline private methodPath methodMatch path = Route.ofMatch (methodMatch |> Route.Match.And <| Route.Match.pathExact path)
 
-    let inline private methodPath methodMatch path = ofMatch (methodMatch |> Match.And <| Match.pathExact path)
+    type RouteMatchCode = Get of path:string | Put of string | Post of string | Delete of string | All
 
-
-    let get path = methodPath Routing.Match.get path    
-    /// HTTP GET
-    let (=>>) = get
-
-    let (^=>>) path service = methodPath Routing.Match.get path (service |> Routing.decodeModel)
-
-
-    let put path = methodPath Match.put path
-    let (==>) = put
-
-    let delete path = methodPath Match.delete path
-    let (-=>) = delete
-
-    let post path = methodPath Match.post path
-    let (!=>) = post
-
-
-    type HttpMethodRoute = Get of path:string | Put of string | Post of string | Delete of string
-
-    let (=>) httpMethodRoute = 
-        match httpMethodRoute with
-        | Get path -> methodPath Match.get path
-        | Put path -> methodPath Match.put path
-        | Post path -> methodPath Match.post path
-        | Delete path -> methodPath Match.delete path
-        
-
-
-    let all service = ofMatch (Routing.Match.ALL) service
-             
-
+    let (=>) = function
+        | Get path    -> methodPath Route.Match.get path
+        | Put path    -> methodPath Route.Match.put path
+        | Post path   -> methodPath Route.Match.post path
+        | Delete path -> methodPath Route.Match.delete path
+        | All         -> Route.ofMatch (Route.Match.ALL)       
 
 
     open System.Net
@@ -270,7 +240,7 @@ module Http =
         ofClient httpClient        
 
 
-    let host uriPrefix (service:HttpService) = async {
+    let host uriPrefix (service:Service<HttpReq, HttpResp>) = async {
 
         let listener = new HttpListener()
         listener.Prefixes.Add(uriPrefix)
