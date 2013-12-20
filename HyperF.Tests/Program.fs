@@ -21,19 +21,21 @@ let main argv =
                 do! Async.Sleep(1000)
                 return! HttpRes.plainText "GETv3" }
 
-//        Get("/sub") ==> [
+//        Path("/sub") ==> [
 //            
 //            Get("/nested_1") => fun _ -> HttpRes.plainText "/sub/nested_1"
 //
-//        ] 
-    
+//        ]    
 
         All => (fun _ -> HttpRes.plainText "ALL")
     ] 
     
+
+
+
     //let routes = routes |> Http.nest (Get("/sub"))
 
-    let routeService = routes |> Http.toService
+    let routeService = routes |> Route.toService
 
     let service = 
         Filter.identity 

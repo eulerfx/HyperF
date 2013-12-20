@@ -148,14 +148,6 @@ module Route =
         
     let (^) = model
 
-    let toService (routes:seq<Route>) =
-        fun (req:HttpReq) ->            
-            let route = routes |> Seq.fold append identity
-            let ri = RouteInfos.parse req
-            match route (req,ri) with
-            | Some res -> res
-            | None _ -> failwith "No matching route!"
-
     module Match =        
 
         let ALL _ = true
@@ -179,45 +171,64 @@ module Route =
         let post = httpMethod "POST"
 
 
-module Http =
+    type RouteMatchPattern = 
+        | Get of path:string | Put of string | Post of string | Delete of string 
+        | Path of string 
+        | Or of RouteMatchPattern * RouteMatchPattern 
+        | All
 
-    let inline private methodPath methodMatch path service = Route.fromMatch (methodMatch |> Route.Match.And <| Route.Match.pathExact path) service
+    let appendPattern parentCode code =
+        match parentCode,code with        
+        | Path p,Get pp -> Get(p + pp)
+        | Path p,Put pp -> Put(p + pp)
+        | Path p,Post pp -> Post(p + pp)
+        | Path p,Delete pp -> Delete(p + pp)        
+        | _ -> failwith "These route patterns can't be merged!"
 
-    type RouteMatchPattern = Get of path:string | Put of string | Post of string | Delete of string | All
+    let (=>) code (service:Service<_,_>) = (code,service)
 
-    let nestRoute code parentCode =
-        match parentCode,code with
-        | Get pp,Get p -> Get(pp + p)
-        | Put pp,Put p -> Put(pp + p)
-        | Post pp,Post p -> Post(pp + p)
-        | Delete pp,Delete p -> Delete(pp + p)
-        | All,Get p -> Get(p)
-        | All,Put p -> Get(p)
-        | All,Post p -> Get(p)
-        | All,Delete p -> Get(p)
-        | _,All   -> All
-        | _ -> failwith "Invalid route!"
-
-    let (=>) code service = (code,service)
-
-    let inline bindService code service = 
-        match code with
-        | Get path    -> methodPath Route.Match.get path service
-        | Put path    -> methodPath Route.Match.put path service
-        | Post path   -> methodPath Route.Match.post path service
-        | Delete path -> methodPath Route.Match.delete path service
-        | All         -> Route.fromMatch Route.Match.ALL service
-
-    let toService routes =        
-        routes
-        |> Seq.map (bindService |> uncurry)
-        |> Route.toService  
+    let inline private methodPath methodMatch path service = fromMatch (methodMatch |> Match.And <| Match.pathExact path) service
     
+    
+    let inline bindService (code,service) = 
+        match code with
+        | Get path    -> methodPath Match.get path service
+        | Put path    -> methodPath Match.put path service
+        | Post path   -> methodPath Match.post path service
+        | Delete path -> methodPath Match.delete path service
+        | Path path   -> fromMatch (Match.pathExact path) service
+        | All         -> fromMatch (Match.ALL) service
+        | Or _ -> failwith "Route must be terminal to bind to service!"
+    
+    let toService routes =        
+        let route = routes |> Seq.map bindService |> Seq.fold append identity
+        fun (req:HttpReq) ->
+            let ri = RouteInfos.parse req
+            match route (req,ri) with
+            | Some res -> res
+            | None _ -> failwith "No matching route!"
 
-    let nest parentCode = Seq.map (fun (code,service) -> (nestRoute code parentCode),service)
-            
-    let (==>) code routes = nest code routes
 
+//    let nest parentPat (routes:(RouteMatchPattern * (HttpReq * RouteInfo -> Async<HttpResp> option)) list) = 
+//        
+//        let routes = routes |> Seq.map (fun (pat,service) -> (appendPattern parentPat pat),service)
+//
+//        let service =        
+//            let route = routes |> Seq.map (fun route ->  Seq.fold append identity
+//            fun req ->
+//                match route req with
+//                | Some res -> res
+//                | None _ -> failwith "No matching route!"
+//
+//        
+//        parentPat,service
+//
+//            
+//    let (==>) code routes = nest code routes
+
+
+
+module Http =    
 
     open System.Net
     open System.Net.Http
