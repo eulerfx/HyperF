@@ -26,6 +26,10 @@ module Strings =
 
     let equalToIgnoreCase = equalTo (StringComparison.OrdinalIgnoreCase)
 
+    let inline startsWith (comp:StringComparison) (a:string) (b:string) = a.StartsWith(b, comp)
+
+    let startsWithIngoreCase = startsWith (StringComparison.OrdinalIgnoreCase)
+
 
 module Operators =
 
