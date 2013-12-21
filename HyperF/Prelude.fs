@@ -14,6 +14,7 @@ module Cont =
 
     type Cont<'a,'r> = ('a  -> 'r) -> 'r
 
+    // based on Haskell implementation from "http://www.eliza.ch/doc/wadler92essence_of_FP.pdf" http://www.eliza.ch/doc/wadler92essence_of_FP.pdf
     let bind (m:Cont<'a, 'r>) k c = m (fun a -> k a c)
 
 
