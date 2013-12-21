@@ -90,7 +90,8 @@ module Route =
         let isMatch = patternToMatch pat
         fromMatch isMatch service
 
-    let private toServiceFull cont routes =        
+    /// converts a set of routes into a serivce given an escape hatch result.
+    let private toServiceCont cont routes =        
         let route = routes |> Seq.map patternToRoute |> Seq.fold append identity
         fun (req:HttpReq) ->
             let ri = RouteInfos.parse req
@@ -98,7 +99,7 @@ module Route =
             | Some result -> result
             | None -> cont
 
-    let toService routes = routes |> List.concat |> toServiceFull (HttpRes.StatusCode.notFound404())
+    let toService routes = routes |> List.concat |> toServiceCont (HttpRes.StatusCode.notFound404())
 
     let (=>) (pat:RouteMatchPattern) (service:Service<_,_>) = [(pat,service)]
 
@@ -119,6 +120,6 @@ module Route =
         |> List.concat 
         |> List.map (fun (pat,service) -> nestPat(parentPat,pat),service)
                 
-    let (==>) code routes = nestInner code routes
+    let (==>) pat routes = nestInner pat routes
 
     let nest parentPat routes = [ nestInner parentPat routes ]

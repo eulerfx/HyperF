@@ -30,6 +30,35 @@ module Strings =
 
     let startsWithIngoreCase = startsWith (StringComparison.OrdinalIgnoreCase)
 
+    let inline split (ss:string[]) (str:string) = str.Split(ss, StringSplitOptions.RemoveEmptyEntries)    
+
+    //let inline splitChars (str:string) (cs:char[]) = str.Split(cs, StringSplitOptions.RemoveEmptyEntries)
+
+    let inline splitByChar (c:char) (str:string) = str.Split(c)
+
+    let inline splitByCharRE (c:char) (str:string) = str.Split([|c|], StringSplitOptions.RemoveEmptyEntries)
+
+    let inline trimStart (c:char) (str:string) = str.TrimStart(c)
+
+    let inline trimEnd (c:char) (str:string) = str.TrimEnd(c)
+
+    let inline trim (cs) (str:string) = str.Trim(cs)
+    
+
+module Option =
+    
+    let join opts = opts |> Seq.where Option.isSome |> Seq.map Option.get
+
+    let concat = function 
+        | Some value ->
+            match value with
+            | Some value -> value |> Some
+            | None -> None
+        | None -> None
+
+    //let join ms = ms |> Seq.map Option.toArray |> Seq.concat
+
+
 
 module Operators =
 
