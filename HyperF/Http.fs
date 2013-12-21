@@ -47,6 +47,18 @@ module HttpRes =
 
     let file path = fromContentTypeAndStream "text/plain" (File.OpenRead(path))
 
+
+    let statusCode (httpStatusCode:int) = 
+        { headers = Map.empty
+          body = null } |> lift
+
+    
+    module StatusCode =
+
+        let notFound404() = statusCode 404
+        
+
+
     open Newtonsoft.Json
     
     let json (obj:obj) =        

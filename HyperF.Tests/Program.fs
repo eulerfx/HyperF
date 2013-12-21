@@ -21,11 +21,11 @@ let main argv =
                 do! Async.Sleep(1000)
                 return! HttpRes.plainText "GETv3" }
 
-//        Path("/sub") ==> [
-//            
-//            Get("/nested_1") => fun _ -> HttpRes.plainText "/sub/nested_1"
-//
-//        ]    
+        Path("/sub") ==> [
+            
+            Get("/nested_1") => fun _ -> HttpRes.plainText "/sub/nested_1"
+
+        ]    
 
         All => (fun _ -> HttpRes.plainText "ALL")
     ] 
