@@ -10,12 +10,12 @@ module Prelude =
     let tuple a b = (a,b)
 
 
-module Cont = 
+type Continuation<'a,'r> = ('a  -> 'r) -> 'r
 
-    type Cont<'a,'r> = ('a  -> 'r) -> 'r
+module Continuation =     
 
-    // based on Haskell implementation from "http://www.eliza.ch/doc/wadler92essence_of_FP.pdf" http://www.eliza.ch/doc/wadler92essence_of_FP.pdf
-    let bind (m:Cont<'a, 'r>) k c = m (fun a -> k a c)
+    // based on Haskell implementation from "The Essence of Functional Programming" http://www.eliza.ch/doc/wadler92essence_of_FP.pdf
+    let bind (m:Continuation<'a, 'r>) k c = m (fun a -> k a c)
 
 
 module Strings =
@@ -44,25 +44,6 @@ module Operators =
     let inline applyM (builder1:^M1) (builder2:^M2) f m =
         bindM builder1 f <| fun f' -> bindM builder2 m <| fun m' -> returnM builder2 (f' m') 
 
-
-module StateMonad =
- 
-    let (>>=) x f =
-       (fun s0 ->
-          let a,s = x s0
-          f a s)      
- 
-    let returnS a = (fun s -> a, s)
- 
-    type StateBuilder() =
-      member m.Bind(x, f) = x >>= f
-      member m.Return a = returnS a
- 
-    let state = new StateBuilder()
- 
-    let getState = (fun s -> s,s)
-    let setState s = (fun _ -> (),s) 
-    let Execute m s = m s |> fst
 
 module Async =
 

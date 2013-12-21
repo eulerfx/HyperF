@@ -71,14 +71,12 @@ module Route =
 
         let methodAndPattern httpMeth pattern = ((httpMethod httpMeth) |> And <| pathExact pattern)
 
+
     type RouteMatchPattern = 
-        | Get of path:string | Put of string | Post of string | Delete of string 
-        | Sub of string
+        | Get of pattern:string | Put of pattern:string | Post of pattern:string | Delete of pattern:string 
+        | Sub of pattern:string
         | All
-
-    let inline private toRoute methodMatch path service = fromMatch (methodMatch |> Match.And <| Match.pathExact path) service
     
-
     let inline private patternToMatch pat = 
         match pat with
         | Get path    -> Match.methodAndPattern "GET" path
@@ -92,42 +90,35 @@ module Route =
         let isMatch = patternToMatch pat
         fromMatch isMatch service
 
-
-    let private joinResult (pat:RouteMatchPattern,route:Route) = 
-        let isMatch = patternToMatch pat
-        fun (req,ri) ->
-            if isMatch (req,ri) then route (req,ri)
-            else None  
-
-    let toServiceFull cont routes =        
-        let route = routes |> Seq.map (fun (pat,route) -> joinResult(pat,route)) |> Seq.fold append identity
+    let private toServiceFull cont routes =        
+        let route = routes |> Seq.map patternToRoute |> Seq.fold append identity
         fun (req:HttpReq) ->
             let ri = RouteInfos.parse req
             match route (req,ri) with
             | Some result -> result
             | None -> cont
 
-    // used for the root route case to prevent double checking route pattern.
-    let private toServiceDiscardRoute cont routes =        
-        let route = routes |> Seq.map (fun (_,route) -> route) |> Seq.fold append identity
-        fun (req:HttpReq) ->
-            let ri = RouteInfos.parse req
-            match route (req,ri) with
-            | Some result -> result
-            | None -> cont
+    let toService routes = routes |> List.concat |> toServiceFull (HttpRes.StatusCode.notFound404())
 
-    let toService routes = routes |> toServiceDiscardRoute (HttpRes.StatusCode.notFound404())
-
-    let (=>) code (service:Service<_,_>) = (code,patternToRoute(code,service))
+    let (=>) (pat:RouteMatchPattern) (service:Service<_,_>) = [(pat,service)]
 
 
+    let private nestPat = function
+        
+        | Sub p, Get pp    -> Get(p + pp)
+        | Sub p, Put pp    -> Put(p + pp)
+        | Sub p, Post pp   -> Post(p + pp)
+        | Sub p, Delete pp -> Delete(p + pp)
 
+        | All, Get pp      -> Get(pp)
 
+        | _ -> failwith "Invalid nesting!"
 
+    let private nestInner (parentPat:RouteMatchPattern) (routes:(RouteMatchPattern * 'a) list list) =
+        routes 
+        |> List.concat 
+        |> List.map (fun (pat,service) -> nestPat(parentPat,pat),service)
+                
+    let (==>) code routes = nestInner code routes
 
-    let nest (pat:RouteMatchPattern) (routes:(RouteMatchPattern * (HttpReq * RouteInfo -> Async<HttpResp> option)) list) =         
-        let route = routes |> Seq.map (fun (_:RouteMatchPattern,route) -> route) |> Seq.fold append identity
-        pat,route
-
-            
-    let (==>) code routes = nest code routes
+    let nest parentPat routes = [ nestInner parentPat routes ]

@@ -26,9 +26,9 @@ module MatchTests =
 
     let routes = [
             
-        Get("/get") => fun _ -> HttpRes.plainText "get"
+        Get("/get") => fun _ -> HttpRes.plainText "/get"
 
-        Post("/post") => fun _ -> HttpRes.plainText "post"
+        Post("/post") => fun _ -> HttpRes.plainText "/post"
 
         Sub("/sub") ==> [
             
@@ -36,22 +36,26 @@ module MatchTests =
 
         ]    
 
-        All => (fun _ -> HttpRes.plainText "*")
+        All => (fun _ -> HttpRes.plainText "/*")
     ] 
 
+    let service = routes |> Route.toService
 
-    let shouldMatchGetRoutePattern() =
-        
-        let matcher = Match.get
+    let res req = req |> service |> Fake.readResText
+    let req = Fake.requestOfMethodUriStr "GET" "http://blurocket.com/get"
 
-        let req = Fake.requestOfMethodUriStr "GET" "http://blurocket.com/get"
-        let ri = RouteInfos.parse req
+    let test expect req = Assert.Equal<string>(expect, res req)
 
-        let service = routes |> Route.toService
+    [<Fact>]
+    let ``/get``() = test "/get" (Fake.requestOfMethodUriStr "GET" "http://blurocket.com/get")
 
-        let result = req |> service |> Fake.readResText
+    [<Fact>]
+    let ``/post``() = test "/post" (Fake.requestOfMethodUriStr "POST" "http://blurocket.com/post")
 
-        assert (result = "get")
-        ()
+    [<Fact>]
+    let ``/sub/leaf``() = test "/sub/leaf" (Fake.requestOfMethodUriStr "GET" "http://blurocket.com/sub/leaf")
+
+    [<Fact>]
+    let ``/*``() = test "/*" (Fake.requestOfMethodUriStr "GET" "http://blurocket.com/blahhh")       
 
 

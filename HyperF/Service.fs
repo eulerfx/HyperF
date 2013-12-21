@@ -1,10 +1,10 @@
 ﻿namespace HyperF
 
+// based on: "Your Server as a Function" http://monkey.org/~marius/funsrv.pdf
+
 type Service<'Req, 'Res> = 'Req -> Async<'Res>
 
-type Filter<'Req, 'Req2, 'Res2, 'Res> = 'Req -> Service<'Req2, 'Res2> -> Async<'Res>
-
-type Filter<'Req, 'Res> = Filter<'Req, 'Req, 'Res, 'Res>
+type Filter<'Req, 'ReqInner, 'ResInner, 'Res> = 'Req -> Service<'ReqInner, 'ResInner> -> Async<'Res>
 
 module Filter =
 
@@ -12,7 +12,7 @@ module Filter =
 
     let identity req (service:Service<_,_>) = service req
 
-    let combine (f2:Filter<_,_,_,_>) (f1:Filter<_,_,_,_>) : Filter<_,_,_,_> = fun req -> Cont.bind (f1 req) f2
+    let combine (f2:Filter<_,_,_,_>) (f1:Filter<_,_,_,_>) : Filter<_,_,_,_> = fun req -> Continuation.bind (f1 req) f2
 
     let fromMap mapReq mapRes =
         fun req (service:Service<_,_>) -> async {

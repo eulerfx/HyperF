@@ -12,7 +12,7 @@ let main argv =
             
         Get("/get_v3/:id") => fun _ -> HttpRes.plainText "GETv3"
 
-        Get("/get_v3_bind/:id") => (^) (fun (req,ri,model:int) -> HttpRes.plainText (sprintf "GETv3 bind %i" model))
+        Get("/get_v3_bind/{id}") => (^) (fun (req,ri,model:int) -> HttpRes.plainText (sprintf "GETv3 bind %i" model))
 
         Get("/get_v3_bind_v2/:id") => Route.model (fun (req,ri,model:int) -> HttpRes.plainText (sprintf "GETv3 bind %i" model))
 
@@ -30,10 +30,7 @@ let main argv =
         All => (fun _ -> HttpRes.plainText "ALL")
     ] 
     
-
-
-
-    //let routes = routes |> Http.nest (Get("/sub"))
+    let nested = routes |> Route.nest (Sub("/parent"))
 
     let routeService = routes |> Route.toService
 
