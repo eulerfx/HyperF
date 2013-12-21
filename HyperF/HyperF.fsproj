@@ -60,6 +60,7 @@
     <Compile Include="Service.fs" />
     <Compile Include="IO.fs" />
     <Compile Include="Http.fs" />
+    <Compile Include="Http.RoutePattern.fs" />
     <Compile Include="Http.Route.fs" />
     <None Include="Script.fsx" />
     <None Include="packages.config" />

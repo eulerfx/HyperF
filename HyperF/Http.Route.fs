@@ -2,30 +2,27 @@
 
 module Route =
 
+    open System
     open EkonBenefits.FSharp.Dynamic
 
 
     type Route = HttpReq * RouteInfo -> Async<HttpResp> option
 
-    and RouteInfo = { 
-        path   : string
-        values : obj }
+    and RouteInfo = { values : obj }        
+        with 
 
-    and IsMatch = HttpReq * RouteInfo -> bool
+            static member parse (req:HttpReq) = { RouteInfo.values = new System.Dynamic.ExpandoObject() } 
 
+            member ri.getValue(name) = Dynamitey.Dynamic.InvokeGet(ri.values, name)
 
-    module RouteInfos =
-    
-        let parse (req:HttpReq) = 
+            member ri.setValue(name,value) = Dynamitey.Dynamic.InvokeSet(ri.values, name, value) |> ignore
 
-            let path = req.url.AbsolutePath
-            
-            let values = new System.Dynamic.ExpandoObject()
-            values?path <- path
-            values?query <- req.url.Query
+            member ri.mergeMap (values:Map<string,string>) =                 
+                values |> Map.iter (fun k v -> ri.setValue(k, v))
+                ri
 
-            { path   = req.url.AbsolutePath
-              values = values }   
+    and IsMatch = HttpReq * RouteInfo -> RouteInfo option
+
 
 
     let identity : Route = fun (req,ri) -> None
@@ -33,9 +30,10 @@ module Route =
     let append (r1:Route) (r2:Route) = fun req -> [r1;r2] |> Seq.tryPick (fun route -> route req)
 
     let fromMatch (m:IsMatch) service = 
-        fun (req,ri) ->
-            if m (req,ri) then service (req,ri) |> Some
-            else None
+        fun (req,ri) -> 
+            match m (req,ri) with
+            | Some ri -> service (req,ri) |> Some
+            | None -> None
 
     /// adapts a model based serivce				
     let model (service:HttpReq * RouteInfo * 'a -> Async<HttpResponse>) =
@@ -45,21 +43,29 @@ module Route =
         
     let (^) = model
 
+
     module Match =        
 
-        let ALL _ = true
+        let inline private konst pred (req,ri) = if pred (req,ri) then Some ri else None
 
-        let And (m1:IsMatch) (m2:IsMatch) = fun a -> (m1 a && m2 a)
+        let inline withRi ri flag = if flag then Some(ri) else None
 
-        let (&&&) = And
+        let ALL = konst (fun _ -> true)
 
-        let Or (m1:IsMatch) (m2:IsMatch) = fun a -> (m1 a || m2 a)
+        let And (m1:IsMatch) (m2:IsMatch) = 
+            fun (req,ri) -> 
+                m1 (req,ri) |> Option.bind (fun ri -> m2 (req,ri))
 
-        let pathExact (path:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase path ri.path
+        let pathExact (path:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase path req.url.AbsolutePath |> withRi ri
 
-        let pathPrefix (pathPrefix:string) (req:HttpRequest,ri:RouteInfo) = Strings.startsWithIngoreCase pathPrefix ri.path                
+        let pathPrefix (pathPrefix:string) (req:HttpRequest,ri:RouteInfo) = Strings.startsWithIngoreCase pathPrefix req.url.AbsolutePath |> withRi ri
+        
+        let pattern (pattern:string) = 
+            let pat = RoutePattern.matchUrl pattern
+            fun (req:HttpRequest,ri:RouteInfo) -> 
+                pat req.url |> Option.map (fun values -> ri.mergeMap(values))
 
-        let httpMethod (httpMethod:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase httpMethod req.httpMethod
+        let httpMethod (httpMethod:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase httpMethod req.httpMethod |> withRi ri
 
         let get = httpMethod "GET"
         
@@ -69,7 +75,8 @@ module Route =
 
         let post = httpMethod "POST"
 
-        let methodAndPattern httpMeth pattern = ((httpMethod httpMeth) |> And <| pathExact pattern)
+        let inline methodAndPattern httpMeth pat = ((httpMethod httpMeth) |> And <| pattern pat)
+
 
 
     type RouteMatchPattern = 
@@ -94,7 +101,7 @@ module Route =
     let private toServiceCont cont routes =        
         let route = routes |> Seq.map patternToRoute |> Seq.fold append identity
         fun (req:HttpReq) ->
-            let ri = RouteInfos.parse req
+            let ri = RouteInfo.parse req
             match route (req,ri) with
             | Some result -> result
             | None -> cont
@@ -102,7 +109,6 @@ module Route =
     let toService routes = routes |> List.concat |> toServiceCont (HttpRes.StatusCode.notFound404())
 
     let (=>) (pat:RouteMatchPattern) (service:Service<_,_>) = [(pat,service)]
-
 
     let private nestPat = function
         
