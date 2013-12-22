@@ -31,12 +31,9 @@ module RouteInfoTests =
     let shouldMerge() =
         let ri = { values = new System.Dynamic.ExpandoObject() }
         let ri = ri.mergeMap([ ("hello","world") ; ("foo","bar") ] |> Map.ofList)
-
         ri.values?hello |> should equal "world"
         ri.values?foo |> should equal "bar"
         ri.getValue("foo") |> should equal "bar"
-
-        ()
 
 
 module MatchTests =

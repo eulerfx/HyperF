@@ -16,6 +16,9 @@ type HttpRequest = {
 and HttpReq = HttpRequest
 
 
+
+
+
 type HttpResponse = {
     headers : Map<string, string list>
     body : Stream
@@ -170,7 +173,6 @@ module Http =
 
             let! response = service request
             do! response.body.CopyToAsync(ctx.Response.OutputStream) |> Async.AwaitIAsyncResult |> Async.Ignore
-            ctx.Response.OutputStream.Dispose()
             ctx.Response.Close() }
 
         let ct = CancellationToken.None
