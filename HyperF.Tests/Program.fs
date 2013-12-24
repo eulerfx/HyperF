@@ -5,6 +5,29 @@ open Http
 open Route
 open EkonBenefits.FSharp.Dynamic
 
+
+module DbAccessSample = 
+
+    let run() =
+        
+
+        
+        
+        let routes = [
+            
+            Get("/data/:id") => fun _ -> HttpRes.plainText "GETv3"
+        ]
+
+
+        let routeService = routes |> Route.toService
+
+
+
+        ()
+
+
+
+
 [<EntryPoint>]
 let main argv =    
 
@@ -30,7 +53,7 @@ let main argv =
         All => (fun _ -> HttpRes.plainText "ALL")
     ] 
     
-    let nested = routes |> Route.nest (Sub("/parent"))
+    //let nested = routes |> Route.nest (Sub("/parent"))
 
     let routeService = routes |> Route.toService
 

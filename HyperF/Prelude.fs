@@ -56,8 +56,7 @@ module Option =
             | None -> None
         | None -> None
 
-    //let join ms = ms |> Seq.map Option.toArray |> Seq.concat
-
+    let getOrElse def = function Some v -> v | None -> def
 
 
 module Operators =

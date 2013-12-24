@@ -6,6 +6,9 @@ type Service<'Req, 'Res> = 'Req -> Async<'Res>
 
 type Filter<'Req, 'ReqInner, 'ResInner, 'Res> = 'Req -> Service<'ReqInner, 'ResInner> -> Async<'Res>
 
+type Sink<'Req> = Service<'Req,unit>
+
+
 module Filter =
 
     open Async
@@ -39,3 +42,38 @@ module Filter =
     let printfnF req service = beforeAfterSync (fun _ -> printfn "before") (fun _ -> printfn "after") req service
 
     let toService (service:Service<_,_>) (filter:Filter<_,_,_,_>) = fun req -> service |> (filter req)
+
+    let handleEx succf errf req (service:Service<_,_>) = async {
+            try
+                let! res = service req
+                return succf res
+            with 
+                exn -> return errf exn }
+
+    let handleExUnit req service = handleEx id id req service
+
+    let handleExEither req service = handleEx Choice1Of2 Choice2Of2 req service
+
+
+
+module Sink =
+
+    module Seq =
+        
+        let apply s fs = fs |> Seq.map (fun f -> f s) 
+    
+    [<GeneralizableValue>]
+    let unit<'a> : Sink<'a> = 
+        let asyncUnit = Async.unit()
+        fun req -> asyncUnit
+
+    let combine (ss:Sink<_> seq) = fun req -> Async.Parallel(ss |> Seq.apply req) |> Async.Ignore
+
+    let append (a:Sink<_>) (b:Sink<_>) = 
+        fun req -> async {
+            let! a = a req |> Async.StartChild
+            let! b = b req |> Async.StartChild
+            do! a
+            do! b }
+
+    let forget (a:Sink<_>) = fun req -> Async.unit()
