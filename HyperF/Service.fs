@@ -6,8 +6,9 @@ type Service<'Req, 'Res> = 'Req -> Async<'Res>
 
 type Filter<'Req, 'ReqInner, 'ResInner, 'Res> = 'Req -> Service<'ReqInner, 'ResInner> -> Async<'Res>
 
-type Sink<'Req> = Service<'Req,unit>
+type Sink<'Req> = Service<'Req, unit>
 
+//type SinkFilter<'Req, 'ReqInner> = Filter<'Req, 'ReqInner, unit, unit>
 
 module Filter =
 
@@ -75,5 +76,3 @@ module Sink =
             let! b = b req |> Async.StartChild
             do! a
             do! b }
-
-    let forget (a:Sink<_>) = fun req -> Async.unit()

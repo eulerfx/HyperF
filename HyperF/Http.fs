@@ -32,9 +32,7 @@ type HttpAuthReq = HttpAuthReq of HttpReq * user:string
 
 
 
-module HttpRes =
-    
-    let private lift (response:HttpResp) = Async.unit response
+module HttpRes =   
 
     let echo (request:HttpRequest) = {
         headers = request.headers
@@ -42,18 +40,18 @@ module HttpRes =
 
     let fromContentTypeAndStream (contentType:string) (stream:Stream) =
         { headers = Map.empty
-          body = stream } |> lift
+          body    = stream } |> Async.unit
 
     let fromContentTypeAndBytes (contentType:string) (bytes:byte array) = fromContentTypeAndStream contentType (new MemoryStream(bytes))
     
     let plainText (str:string) = fromContentTypeAndBytes "text/plain" (Encoding.UTF8.GetBytes(str))
 
+    // TODO: refactor, somehow, to use Socket.SendFile. for example, declare SendFile request as a value to be handled by hosting infrastructure.
     let file path = fromContentTypeAndStream "text/plain" (File.OpenRead(path))
-
 
     let statusCode (httpStatusCode:int) = 
         { headers = Map.empty
-          body = null } |> lift
+          body = null } |> Async.unit
 
     
     module StatusCode =

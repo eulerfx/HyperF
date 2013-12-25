@@ -24,6 +24,8 @@ module Routing =
     
     type Route = Message -> Sink<Message> option
 
+    type ServiceRoute<'Res> = Message -> Service<Message, 'Res> option
+
     module Option =
         
         let orElse (other:Lazy<option<_>>) opt = 
@@ -61,8 +63,23 @@ module Routing =
         let onPayloadTypeGTE s = onPayloadType Is.GTE s
 
 
-    
-      
+//type IQuery<'TResult> = interface end
+//    
+//
+//type ProductQuery = {
+//    query : string
+//} 
+//
+//with interface IQuery<ProductQueryResults>
+//
+//and ProductQueryResults = {
+//    products : string[]
+//}
+//
+//
+//module Bus =
+//    
+//    let query (q:#IQuery<'TResult>) = 0
 
 
 
