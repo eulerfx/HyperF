@@ -61,7 +61,7 @@ module AsyncStreamSample =
                 fun (req,ri) ->
                     rows (ri.values?c |> Int32.Parse) (ri.values?user)
                     |> AsyncSeqStream.ofByteRows 
-                    |> HttpRes.fromContentTypeAndStream "text/plain"
+                    |> HttpRes.fromMediaTypeAndStream "text/plain"
         ]
 
 

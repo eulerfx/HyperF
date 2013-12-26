@@ -8,17 +8,16 @@ module Fake =
 
     open System
     open System.Text
+    open System.Net.Http
 
-    let requestOfMethodUriStr httpMethod uriString = 
-        { headers = Map.empty
-          httpMethod = httpMethod
-          url = Uri(uriString)
-          body = null }
+    let requestOfMethodUriStr httpMethod uriString = new HttpRequestMessage(httpMethod, new Uri(uriString))
 
     let resOfText text = HttpRes.plainText text
 
-    let readResText (res:Async<HttpResp>) = 
-        async { let! res = res in return res.body |> IO.readToString |> Async.RunSynchronously } |> Async.RunSynchronously
+    let readResText (res:Async<HttpResp>) = async { 
+        let! res = res
+        let! stream = res.Content.ReadAsStreamAsync() |> Async.AwaitTask 
+        return stream |> IO.readToString |> Async.RunSynchronously } |> Async.RunSynchronously
         
 
 
@@ -39,6 +38,7 @@ module RouteInfoTests =
 module MatchTests =
 
     open Route
+    open System.Net.Http
 
     let routes = [
             
@@ -58,21 +58,21 @@ module MatchTests =
     let service = routes |> Route.toService
 
     let res req = req |> service |> Fake.readResText
-    let req = Fake.requestOfMethodUriStr "GET" "http://blurocket.com/get"
+    let req = Fake.requestOfMethodUriStr HttpMethod.Get "http://blurocket.com/get"
 
     let test expect req = Assert.Equal<string>(expect, res req)
 
     [<Fact>]
-    let ``/get``() = test "/get" (Fake.requestOfMethodUriStr "GET" "http://blurocket.com/get")
+    let ``/get``() = test "/get" (Fake.requestOfMethodUriStr HttpMethod.Get "http://blurocket.com/get")
 
     [<Fact>]
-    let ``/post``() = test "/post" (Fake.requestOfMethodUriStr "POST" "http://blurocket.com/post")
+    let ``/post``() = test "/post" (Fake.requestOfMethodUriStr HttpMethod.Post "http://blurocket.com/post")
 
     [<Fact>]
-    let ``/sub/leaf``() = test "/sub/leaf" (Fake.requestOfMethodUriStr "GET" "http://blurocket.com/sub/leaf")
+    let ``/sub/leaf``() = test "/sub/leaf" (Fake.requestOfMethodUriStr HttpMethod.Get "http://blurocket.com/sub/leaf")
 
     [<Fact>]
-    let ``/*``() = test "/*" (Fake.requestOfMethodUriStr "GET" "http://blurocket.com/blahhh")       
+    let ``/*``() = test "/*" (Fake.requestOfMethodUriStr HttpMethod.Get "http://blurocket.com/blahhh")       
 
 
 

@@ -3,28 +3,37 @@
 open System
 open System.IO
 open System.Text
+open System.Net
+open System.Net.Http
+open System.Net.Http.Headers
 
 
 
-type HttpRequest = {    
-    url : Uri
-    httpMethod : string
-    headers : Map<string, string list>
-    body : Stream
-}
-
-and HttpReq = HttpRequest
-
-
+//type HttpRequest = {    
+//    url : Uri
+//    httpMethod : string
+//    headers : Map<string, string list>
+//    body : Stream
+//}
+//
+//and HttpReq = HttpRequest
 
 
+//type HttpResponse = {
+//    headers : Map<string, string list>
+//    body : Stream
+//}
+//
+//and HttpResp = HttpResponse
 
-type HttpResponse = {
-    headers : Map<string, string list>
-    body : Stream
-}
 
-and HttpResp = HttpResponse
+
+
+//type HttpRequest = HttpRequestMessage
+
+type HttpReq = HttpRequestMessage
+
+type HttpResp = HttpResponseMessage
 
 
 
@@ -34,29 +43,32 @@ type HttpAuthReq = HttpAuthReq of HttpReq * user:string
 
 module HttpRes =   
 
-    let echo (request:HttpRequest) = {
-        headers = request.headers
-        body = request.body |> IO.echo }
+    let echo (req:HttpReq) = async {
+        let! stream = req.Content.ReadAsStreamAsync() |> Async.AwaitTask
+        let res = new HttpResponseMessage(HttpStatusCode.OK)
+        res.Content <- new StreamContent(stream |> IO.echo)
+        return res }
 
-    let fromContentTypeAndStream (contentType:string) (stream:Stream) =
-        { headers = Map.empty
-          body    = stream } |> Async.unit
+    let fromMediaTypeAndStream (mediaType:string) (stream:Stream) = async {
+        let res = new HttpResponseMessage(HttpStatusCode.OK)
+        let content = new StreamContent(stream)
+        content.Headers.ContentType <- new MediaTypeHeaderValue(mediaType)
+        res.Content <- content
+        return res }
 
-    let fromContentTypeAndBytes (contentType:string) (bytes:byte array) = fromContentTypeAndStream contentType (new MemoryStream(bytes))
+    let fromMediaTypeAndBytes (contentType:string) (bytes:byte array) = fromMediaTypeAndStream contentType (new MemoryStream(bytes))
     
-    let plainText (str:string) = fromContentTypeAndBytes "text/plain" (Encoding.UTF8.GetBytes(str))
+    let plainText (str:string) = fromMediaTypeAndBytes "text/plain" (Encoding.UTF8.GetBytes(str))
 
     // TODO: refactor, somehow, to use Socket.SendFile. for example, declare SendFile request as a value to be handled by hosting infrastructure.
-    let file path = fromContentTypeAndStream "text/plain" (File.OpenRead(path))
+    let file path = fromMediaTypeAndStream "text/plain" (File.OpenRead(path))
 
-    let statusCode (httpStatusCode:int) = 
-        { headers = Map.empty
-          body = null } |> Async.unit
+    let statusCode (statusCode) = new HttpResponseMessage(statusCode) |> Async.unit
 
     
     module StatusCode =
 
-        let notFound404() = statusCode 404
+        let notFound404() = statusCode HttpStatusCode.NotFound
         
 
 
@@ -64,7 +76,7 @@ module HttpRes =
     
     let json (obj:obj) =        
         let json = JsonConvert.SerializeObject(obj) in
-        fromContentTypeAndBytes "application/json" (Encoding.UTF8.GetBytes(json))
+        fromMediaTypeAndBytes "application/json" (Encoding.UTF8.GetBytes(json))
 
 
     module Jade =
@@ -81,7 +93,7 @@ module HttpService =
 
     let helloWorld _ = HttpRes.plainText "hello world"
 
-    let echo = HttpRes.echo >> Async.unit
+    let echo = HttpRes.echo // >> Async.unit
 
 
   
@@ -99,21 +111,25 @@ module HttpFilter =
 
         open Newtonsoft.Json
 
+        [<Literal>]
+        let MediaType = "application/json"
+
         let private jsonSer = new JsonSerializer()
 
-        let private decodeDynamic (req:HttpReq) = 
-            let sr = new StreamReader(req.body)
-            jsonSer.Deserialize(sr, typeof<System.Dynamic.DynamicObject>)
+        let private decodeDynamic (req:HttpReq) = async {
+            let! stream = req.Content.ReadAsStreamAsync() |> Async.AwaitTask
+            let sr = new StreamReader(stream)
+            return jsonSer.Deserialize(sr, null) }
 
         let private encode obj =             
             let s = new MemoryStream()
             let sw = new StreamWriter(s)
             jsonSer.Serialize(sw,obj)
-            HttpRes.fromContentTypeAndStream "application/json" s
+            HttpRes.fromMediaTypeAndStream MediaType
 
         let dynamic = 
             Filter.fromMap 
-                (fun (req:HttpReq) -> (req,(decodeDynamic req)) |> Async.unit) 
+                (fun (req:HttpReq) -> async { let! decoded = decodeDynamic req in return (req,decoded) }) 
                 (fun (res:obj) -> res |> HttpRes.json)
 
 
@@ -124,29 +140,7 @@ module Http =
     open System.Net.Http
     open System.Threading
 
-    let ofClient (httpClient:HttpClient) =
-
-        fun (req:HttpReq) -> async {
-
-            let reqMsg = new HttpRequestMessage()
-            reqMsg.RequestUri <- req.url
-            reqMsg.Method <- 
-                match req.httpMethod with
-                | "POST" -> HttpMethod.Post
-                | "GET" -> HttpMethod.Get
-                | "PUT" -> HttpMethod.Put
-                | "DELETE" -> HttpMethod.Delete
-                | _ -> HttpMethod.Get
-
-            reqMsg.Content <- new StreamContent(req.body)                          
-
-            let! repMsg = httpClient.SendAsync(reqMsg) |> Async.AwaitTask
-            let! repBody = repMsg.Content.ReadAsStreamAsync() |> Async.AwaitTask
-
-            return {
-                headers = Map.empty
-                body = repBody } 
-            }
+    let ofClient (httpClient:HttpClient) = fun (req:HttpReq) -> httpClient.SendAsync(req) |> Async.AwaitTask
     
     let client baseUrl = 
         let httpClient = new HttpClient()
@@ -163,14 +157,40 @@ module Http =
 
         let proc (ctx:HttpListenerContext) = async {
 
-            let request = { 
-                url = ctx.Request.Url
-                httpMethod = ctx.Request.HttpMethod
-                headers = Map.empty
-                body = ctx.Request.InputStream }
+            let httpMethod = 
+                match ctx.Request.HttpMethod.ToUpperInvariant() with
+                | "GET"     -> HttpMethod.Get
+                | "POST"    -> HttpMethod.Post
+                | "PUT"     -> HttpMethod.Put
+                | "DELETE"  -> HttpMethod.Delete
+                | "HEAD"    -> HttpMethod.Head
+                | "OPTIONS" -> HttpMethod.Options
+                | "TRACE"   -> HttpMethod.Trace
+                | m         -> new HttpMethod(m)
 
-            let! response = service request
-            do! response.body.CopyToAsync(ctx.Response.OutputStream) |> Async.AwaitIAsyncResult |> Async.Ignore
+
+            use request = new HttpRequestMessage(httpMethod, ctx.Request.Url)
+            request.Headers.Referrer <- ctx.Request.UrlReferrer
+            
+            for i in [0..ctx.Request.Headers.Count] do
+                let name = ctx.Request.Headers.GetKey(i)
+                let values = ctx.Request.Headers.GetValues(i)
+                request.Headers.Add(name, values)
+
+            request.Content <- new StreamContent(ctx.Request.InputStream)
+
+            use! response = service request
+
+            response.Headers
+            |> Seq.iter (fun pair ->
+                pair.Value
+                |> Seq.iter (fun value -> ctx.Response.Headers.Add(pair.Key,value))                  
+            )
+
+            ctx.Response.ProtocolVersion <- response.Version
+
+            do! response.Content.CopyToAsync(ctx.Response.OutputStream) |> Async.AwaitIAsyncResult |> Async.Ignore
+            
             ctx.Response.Close() }
 
         let ct = CancellationToken.None

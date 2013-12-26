@@ -3,6 +3,9 @@
 module Route =
 
     open System
+    open System.Net
+    open System.Net.Http
+
     open EkonBenefits.FSharp.Dynamic
 
 
@@ -36,7 +39,7 @@ module Route =
             | None -> None
 
     /// adapts a model based serivce				
-    let model (service:HttpReq * RouteInfo * 'a -> Async<HttpResponse>) =
+    let model (service:HttpReq * RouteInfo * 'a -> Async<HttpResp>) =
         fun (req,ri) ->
             let a = Unchecked.defaultof<'a> // TODO: decode via content headers, or decode via filter into value?
             service (req,ri,a)
@@ -56,24 +59,24 @@ module Route =
             fun (req,ri) -> 
                 m1 (req,ri) |> Option.bind (fun ri -> m2 (req,ri))
 
-        let pathExact (path:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase path req.url.AbsolutePath |> withRi ri
+        let pathExact (path:string) (req:HttpReq,ri:RouteInfo) = Strings.equalToIgnoreCase path req.RequestUri.AbsolutePath |> withRi ri
 
-        let pathPrefix (pathPrefix:string) (req:HttpRequest,ri:RouteInfo) = Strings.startsWithIngoreCase pathPrefix req.url.AbsolutePath |> withRi ri
+        let pathPrefix (pathPrefix:string) (req:HttpReq,ri:RouteInfo) = Strings.startsWithIngoreCase pathPrefix req.RequestUri.AbsolutePath |> withRi ri
         
         let pattern (pattern:string) = 
             let pat = RoutePattern.matchUrl pattern
-            fun (req:HttpRequest,ri:RouteInfo) -> 
-                pat req.url |> Option.map (fun values -> ri.mergeMap(values))
+            fun (req:HttpReq,ri:RouteInfo) -> 
+                pat req.RequestUri |> Option.map (fun values -> ri.mergeMap(values))
 
-        let httpMethod (httpMethod:string) (req:HttpRequest,ri:RouteInfo) = Strings.equalToIgnoreCase httpMethod req.httpMethod |> withRi ri
+        let httpMethod (httpMethod:HttpMethod) (req:HttpReq,ri:RouteInfo) = httpMethod = req.Method |> withRi ri
 
-        let get = httpMethod "GET"
-        
-        let put = httpMethod "PUT"
-
-        let delete = httpMethod "DELETE"
-
-        let post = httpMethod "POST"
+//        let get = httpMethod HttpMethod.Get
+//        
+//        let put = httpMethod HttpMethod.Put
+//
+//        let delete = httpMethod HttpMethod.Delete
+//
+//        let post = httpMethod HttpMethod.Post
 
         let inline methodAndPattern httpMeth pat = ((httpMethod httpMeth) |> And <| pattern pat)
 
@@ -86,10 +89,10 @@ module Route =
     
     let inline private patternToMatch pat = 
         match pat with
-        | Get path    -> Match.methodAndPattern "GET" path
-        | Put path    -> Match.methodAndPattern "PUT" path
-        | Post path   -> Match.methodAndPattern "POST" path
-        | Delete path -> Match.methodAndPattern "DELETE" path
+        | Get path    -> Match.methodAndPattern HttpMethod.Get path
+        | Put path    -> Match.methodAndPattern HttpMethod.Put path
+        | Post path   -> Match.methodAndPattern HttpMethod.Post path
+        | Delete path -> Match.methodAndPattern HttpMethod.Delete path
         | Sub path    -> Match.pathPrefix path
         | All         -> Match.ALL
     
