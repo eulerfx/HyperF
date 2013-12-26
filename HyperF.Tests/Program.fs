@@ -8,7 +8,7 @@ open Route
 [<EntryPoint>]
 let main argv =    
 
-    //Basic.run()
+    //BasicSample.run()
     AsyncStreamSample.run()
     
     0

@@ -38,7 +38,7 @@ module BasicSample =
             |> Filter.combine Filter.printfnF 
             |> Filter.toService routeService
 
-        Http.host "http://localhost:8081/" service |> Async.RunSynchronously
+        Http.host "http://+:8081/" service |> Async.RunSynchronously
 
 
 module AsyncStreamSample = 

@@ -8,37 +8,11 @@ open System.Net.Http
 open System.Net.Http.Headers
 
 
-
-//type HttpRequest = {    
-//    url : Uri
-//    httpMethod : string
-//    headers : Map<string, string list>
-//    body : Stream
-//}
-//
-//and HttpReq = HttpRequest
-
-
-//type HttpResponse = {
-//    headers : Map<string, string list>
-//    body : Stream
-//}
-//
-//and HttpResp = HttpResponse
-
-
-
-
-//type HttpRequest = HttpRequestMessage
-
 type HttpReq = HttpRequestMessage
 
 type HttpResp = HttpResponseMessage
 
-
-
 type HttpAuthReq = HttpAuthReq of HttpReq * user:string
-
 
 
 module HttpRes =   
@@ -46,7 +20,9 @@ module HttpRes =
     let echo (req:HttpReq) = async {
         let! stream = req.Content.ReadAsStreamAsync() |> Async.AwaitTask
         let res = new HttpResponseMessage(HttpStatusCode.OK)
+        res.RequestMessage <- req
         res.Content <- new StreamContent(stream |> IO.echo)
+        
         return res }
 
     let fromMediaTypeAndStream (mediaType:string) (stream:Stream) = async {
@@ -172,7 +148,7 @@ module Http =
             use request = new HttpRequestMessage(httpMethod, ctx.Request.Url)
             request.Headers.Referrer <- ctx.Request.UrlReferrer
             
-            for i in [0..ctx.Request.Headers.Count] do
+            for i in [0..ctx.Request.Headers.Count - 1] do
                 let name = ctx.Request.Headers.GetKey(i)
                 let values = ctx.Request.Headers.GetValues(i)
                 request.Headers.Add(name, values)
