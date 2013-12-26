@@ -2,7 +2,7 @@
 
 open Http
 
-type ContentTypeDecoder = string list * (HttpReq -> obj option)
+type MediaTypeFormatter = string list * (HttpReq -> obj option)
 
 
 module HttpContentTypeDecoders =
