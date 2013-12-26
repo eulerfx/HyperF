@@ -84,25 +84,45 @@ module DbAccessSample =
         let! read = reader.ReadAsync() |> Async.AwaitTask
         yield reader :> IDataRecord }
 
+
+    type Reader<'c, 'a> = 'c -> 'a
+
+    module Reader =
+        
+        let returnR a : Reader<'c, 'a> = fun _ -> a
+
+        let map (m:Reader<'c, 'a>) (f:'a -> 'b) : Reader<'c, 'b> = fun c -> f (m c)
+
+        let bind (m:Reader<'c, 'a>) (f:'a -> Reader<'c, 'b>) : Reader<'c, 'b> = fun c -> (f (m c)) c
+
+
     let run() =
     
         let connStr = ""        
 
-        let getData connStr =
+        let provideConn connStr =
             let conn = new SqlConnection(connStr)                        
             conn.Open()
-            fun (id:string) ->
-                let cmd = conn.CreateCommand()
-                cmd.CommandText <- "SELECT 1 as One"
-                cmd.Parameters.AddWithValue("@id", id) |> ignore
-                readDataRecords cmd |> AsyncSeq.map (fun r -> "")
+            fun (m:Reader<SqlConnection, 'r>) ->
+                try m conn
+                finally conn.Close()
 
-        let getData id = getData connStr id |> AsyncSeq.map (fun row -> Encoding.UTF8.GetBytes(row + Environment.NewLine))
 
+        let getData (conn:SqlConnection) (id:string) =
+            let cmd = conn.CreateCommand()
+            cmd.CommandText <- "SELECT 1 as One"
+            cmd.Parameters.AddWithValue("@id", id) |> ignore
+            readDataRecords cmd |> AsyncSeq.map (fun r -> "")
+
+        
+        let provideConn = provideConn connStr
+        let getData = provideConn getData
+        let getData id = getData id |> AsyncSeq.map (fun row -> Encoding.UTF8.GetBytes(row + Environment.NewLine))
 
         let routes = [
             
             Get("/data/:id") => fun (req,ri) -> HttpRes.plainText "DATA!"
+
         ]
 
 
