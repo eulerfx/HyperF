@@ -9,34 +9,68 @@ type Message = {
     payload: obj
 }
 
-type TransportMessage = {
-    headers: Map<string, string>
-    topic: string
-    body: byte[] 
-}
+type MessageService<'res> = Service<Message, 'res>
 
-type MessageEncoder = Message -> TransportMessage
+type MessageService = MessageService<Message>
 
-type MessageDecoder = TransportMessage -> Message
+type MessageSink = MessageService<unit>
 
 
-module Routing =
+
+
+type Sink<'Req> = Service<'Req, unit>
+
+module Sink =
+
+    module Seq =
+        
+        let apply s fs = fs |> Seq.map (fun f -> f s) 
     
-    type Route = Message -> Sink<Message> option
+    [<GeneralizableValue>]
+    let unit<'a> : Sink<'a> = 
+        let asyncUnit = Async.returnA()
+        fun req -> asyncUnit
 
-    type ServiceRoute<'Res> = Message -> Service<Message, 'Res> option
+    let combine (ss:Sink<_> seq) = fun req -> Async.Parallel(ss |> Seq.apply req) |> Async.Ignore
+
+    let append (a:Sink<_>) (b:Sink<_>) = 
+        fun req -> async {
+            let! a = a req |> Async.StartChild
+            let! b = b req |> Async.StartChild
+            do! a
+            do! b }
+
+
+
+
+type Route<'res> = Message -> MessageService<'res> option
+
+
+module Routing =           
 
     module Option =
         
-        let orElse (other:Lazy<option<_>>) opt = 
+        let orElse (other:option<_>) opt = 
             match opt with
             | Some _ -> opt
-            | None -> other.Force()
+            | None -> other
 
-    let orElse (a:Route) (b:Route) : Route = fun m -> a m |> Option.orElse (lazy(b m))            
+    let identity : Route<_> = fun _ -> None
 
-    //let orUnit (route:Route) = fun m -> route m |> Option.getOrElse (Sink.unit<Message>)
-    
+    let append (a:Route<_>) (b:Route<_>) : Route<_> = fun m -> a m |> Option.orElse (b m)
+
+   
+
+    module Match =
+
+        let onPred pred (s:MessageService<'res>) : Route<'res> =
+            fun m ->
+                if pred m then s |> Some
+                else None     
+
+        let onPayloadType pred (s:MessageService<'res>) : Route<'res> = onPred (fun (m:Message) -> pred m.payloadType) s
+
+
     module Is =
         
         open System
@@ -44,42 +78,105 @@ module Routing =
         let inline GTE (a:Type) (b:Type) = a.IsAssignableFrom(b)
 
         let inline EQ (a:Type) (b:Type) = a.Equals(b)
-        
 
-    module Match =
+        // TODO: cache
+        let ofGenericInterfaceType (genericInterfaceType:Type) =
+            let isOf (typ:Type) =
+                typ.GetInterfaces()
+                |> Seq.exists (fun intr -> if intr.IsGenericType && intr.GetGenericTypeDefinition() = genericInterfaceType then true else false)
+            isOf
 
-        /// Filter route.
-        let onFilter pred (s:Sink<_>) : Route =
-            fun m ->
-                if pred m then s |> Some
-                else None     
 
-        let onPayloadType rel (h:Sink<'a>) : Route = onFilter (fun (m:Message) -> rel typeof<'a> m.payloadType) (fun (m:Message) -> m.payload :?> 'a |> h)
+
+
+module Transport =
     
-        /// Converts a sink to a route based on type equality.
-        let onPayloadTypeEQ s = onPayloadType Is.EQ s
+    /// A message in the transport layer.
+    type TransportMessage = {
+        headers: Map<string, string>
+        topic: string
+        body: byte[] 
+    }
 
-        /// Converts a sink to a route based on super-type relation.
-        let onPayloadTypeGTE s = onPayloadType Is.GTE s
+    type Encoder = Message -> TransportMessage
+
+    type Decoder = TransportMessage -> Message
 
 
-//type IQuery<'TResult> = interface end
-//    
-//
-//type ProductQuery = {
-//    query : string
-//} 
-//
-//with interface IQuery<ProductQueryResults>
-//
-//and ProductQueryResults = {
-//    products : string[]
-//}
-//
-//
-//module Bus =
-//    
-//    let query (q:#IQuery<'TResult>) = 0
+
+
+
+type IQuery<'TResult> = interface end
+
+
+module Query =
+
+    type QueryService<'Query, 'Res when 'Query :> IQuery<'Res>> = Service<'Query, 'Res>
+
+    let asMessageService (s:QueryService<'Query, 'Res>) : MessageService = 
+        fun (msg:Message) -> async {
+            let query = msg.payload :?> 'Query
+            let! res = query |> s
+            return {
+                Message.headers = Map.empty
+                topic = ""
+                payloadType = typeof<'Res>
+                payload = res
+            }
+        }
+
+    let asRoute (s:QueryService<'Query, 'Res>) =     
+        let msgService = s |> asMessageService
+        let isQuery = Routing.Is.EQ (typeof<'Query>)
+        Routing.Match.onPayloadType isQuery msgService
+
+
+
+
+/// A transducer (saga = workflow = process manager = aggregate = projection)
+type Transducer<'State, 'In, 'Out> = {
+    transition : 'State -> 'In -> ('State * 'Out) // state monad
+    zero       : 'State
+    apply      : 'Out -> 'State -> 'State
+}
+
+module Transducer =
+    
+    let asMessageSink = 0
+
+
+
+
+module Bus =    
+
+    /// Creates a message from an object based on configured parameters
+    let private toMsg obj =        
+        { 
+            headers = Map.empty
+            topic = ""
+            payloadType = obj.GetType()
+            payload = box obj
+        }
+
+    let send (s:MessageSink) (cmd:obj) = async {
+        let msg = toMsg cmd
+        do! s msg            
+    }
+
+    let publish (s:MessageSink) (evt:obj) = async {
+        let msg = toMsg evt
+        do! s msg            
+    }
+
+    let query (s:MessageService) (q:IQuery<'res>) = async {
+        let msg = q |> toMsg
+        let! res = msg |> s
+        return res.payload :?> 'res
+    }
+
+    // handle command = subscribe to event = register query handler
+
+
 
 
 

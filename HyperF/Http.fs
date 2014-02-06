@@ -32,14 +32,14 @@ module HttpRes =
         res.Content <- content
         return res }
 
-    let fromMediaTypeAndBytes (contentType:string) (bytes:byte array) = fromMediaTypeAndStream contentType (new MemoryStream(bytes))
+    let fromMediaTypeAndBytes (mediaType:string) (bytes:byte array) = fromMediaTypeAndStream mediaType (new MemoryStream(bytes))
     
     let plainText (str:string) = fromMediaTypeAndBytes "text/plain" (Encoding.UTF8.GetBytes(str))
 
     // TODO: refactor, somehow, to use Socket.SendFile. for example, declare SendFile request as a value to be handled by hosting infrastructure.
     let file path = fromMediaTypeAndStream "text/plain" (File.OpenRead(path))
 
-    let statusCode (statusCode) = new HttpResponseMessage(statusCode) |> Async.unit
+    let statusCode (statusCode) = new HttpResponseMessage(statusCode) |> Async.returnA
 
     
     module StatusCode =

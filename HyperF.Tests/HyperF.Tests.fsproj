@@ -85,6 +85,7 @@
     <Compile Include="HttpRouteTests.fs" />
     <Compile Include="HttpConnegTests.fs" />
     <Compile Include="Samples.fs" />
+    <Compile Include="BusTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="packages.config" />

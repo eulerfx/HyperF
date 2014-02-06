@@ -4,11 +4,10 @@
 
 type Service<'Req, 'Res> = 'Req -> Async<'Res>
 
+
+/// A service filter - Kleisli arrow (to continuation monad of service).
 type Filter<'Req, 'ReqInner, 'ResInner, 'Res> = 'Req -> Service<'ReqInner, 'ResInner> -> Async<'Res>
 
-type Sink<'Req> = Service<'Req, unit>
-
-//type SinkFilter<'Req, 'ReqInner> = Filter<'Req, 'ReqInner, unit, unit>
 
 module Filter =
 
@@ -16,7 +15,7 @@ module Filter =
 
     let identity req (service:Service<_,_>) = service req
 
-    let combine (f2:Filter<_,_,_,_>) (f1:Filter<_,_,_,_>) : Filter<_,_,_,_> = fun req -> Continuation.bind (f1 req) f2
+    let andThen (f2:Filter<_,_,_,_>) (f1:Filter<_,_,_,_>) : Filter<_,_,_,_> = fun req -> Continuation.bind (f1 req) f2
 
     let fromMap mapReq mapRes =
         fun req (service:Service<_,_>) -> async {
@@ -36,7 +35,7 @@ module Filter =
         do after (req,res)
         return res }                       
 
-    let timeOut ts req (service:Service<_,_>) = req |> service |> Futures.withTimeout ts
+    let timeOut ts req (service:Service<_,_>) = req |> service |> Async.timeoutAfter ts
 
     let timeOutMs ms = timeOut (System.TimeSpan.FromMilliseconds(ms))
 
@@ -54,25 +53,3 @@ module Filter =
     let handleExUnit req service = handleEx id id req service
 
     let handleExEither req service = handleEx Choice1Of2 Choice2Of2 req service
-
-
-
-module Sink =
-
-    module Seq =
-        
-        let apply s fs = fs |> Seq.map (fun f -> f s) 
-    
-    [<GeneralizableValue>]
-    let unit<'a> : Sink<'a> = 
-        let asyncUnit = Async.unit()
-        fun req -> asyncUnit
-
-    let combine (ss:Sink<_> seq) = fun req -> Async.Parallel(ss |> Seq.apply req) |> Async.Ignore
-
-    let append (a:Sink<_>) (b:Sink<_>) = 
-        fun req -> async {
-            let! a = a req |> Async.StartChild
-            let! b = b req |> Async.StartChild
-            do! a
-            do! b }

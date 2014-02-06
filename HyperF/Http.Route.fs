@@ -1,5 +1,6 @@
 ﻿namespace HyperF
 
+/// Routes demultiplex HTTP requests into specific services.
 module Route =
 
     open System
@@ -30,6 +31,7 @@ module Route =
 
     let identity : Route = fun (req,ri) -> None
 
+    // TODO: optimize
     let append (r1:Route) (r2:Route) = fun req -> [r1;r2] |> Seq.tryPick (fun route -> route req)
 
     let fromMatch (m:IsMatch) service = 

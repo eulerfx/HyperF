@@ -60,7 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Prelude.fs" />
-    <Compile Include="Future.fs" />
+    <Compile Include="Async.fs" />
     <Compile Include="Service.fs" />
     <Compile Include="IO.fs" />
     <Compile Include="Http.fs" />

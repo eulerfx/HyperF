@@ -4,32 +4,25 @@ open System.IO
 
 module IO =
     
-    type 'a IO = IO of 'a
+    type IO<'a> = IO of (unit -> 'a)
 
     let returnIO = IO
 
-    let unitIO = returnIO ()
+    let unitIO = returnIO (fun () -> ())
 
-    let extract io = let (IO(value)) = io in value
+    let run io = let (IO(value)) = io in value()
 
-    let bind (io:'a IO) (k:'a -> 'b IO) = let value = extract io in k value
+    let bind (a:IO<'a>) (k:'a -> IO<'b>) = let a = run a in k a
 
-    let map f (io:'a IO) = let value = extract io in f value |> returnIO
+    let map f (a:IO<'a>) = let a = run a in f a |> returnIO
 
-    let merge io1 io2 =
-        let value1 = extract io1 in
-        let value2 = extract io2 in
-        returnIO (value1,value2)
+    let product a b = returnIO <| fun () -> let a = run a in let b = run b in a,b
 
-    let apply (f:('a -> 'b) IO) (io:'a IO) = let (IO(f,value)) = merge f io in f value |> returnIO
+    let ap (f:IO<('a -> 'b)>) (a:IO<'a>) = 
+        let (IO(f)) = product f a in
+        returnIO <| fun () -> let (f,a) = f() in f a
 
-    let lift f a = f a |> IO
-
-    let lift2 f a b = f a b |> IO
-
-    let lift3 f a b c = f a b c |> IO
-
-    let readFileText path = File.ReadAllText(path) |> returnIO
+    let readFileText path = returnIO <| fun () -> File.ReadAllText(path)
 
     let copyTo (source:Stream) (sink:Stream) = source.CopyToAsync(sink) |> Async.AwaitIAsyncResult |> Async.Ignore
 

@@ -35,7 +35,7 @@ module BasicSample =
 
         let service = 
             Filter.identity 
-            |> Filter.combine Filter.printfnF 
+            |> Filter.andThen Filter.printfnF
             |> Filter.toService routeService
 
         Http.host "http://+:8081/" service |> Async.RunSynchronously
