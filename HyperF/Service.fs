@@ -9,39 +9,43 @@ type Service<'Req, 'Res> = 'Req -> Async<'Res>
 type Filter<'Req, 'ReqInner, 'ResInner, 'Res> = 'Req -> Service<'ReqInner, 'ResInner> -> Async<'Res>
 
 
+type Filter<'Req, 'Res> = 'Req -> Service<'Req, 'Res> -> Async<'Res>
+
+
 module Filter =
 
     open Async
 
-    let identity req (service:Service<_,_>) = service req
+    let identity : Filter<_,_,_,_> = fun (req:'Req) (service:Service<_,_>) -> service req
 
     let andThen (f2:Filter<_,_,_,_>) (f1:Filter<_,_,_,_>) : Filter<_,_,_,_> = fun req -> Continuation.bind (f1 req) f2
 
-    let fromMap mapReq mapRes =
-        fun req (service:Service<_,_>) -> async {
+    let fromMaps mapReq mapRes : Filter<_,_,_,_> =
+        fun (req:'Req) (service:Service<'Req2, 'Res>) -> async {
             let! req' = mapReq req
             let! res = service req'
             return! mapRes res }
         
-    let fromMapReq mapReq req (service:Service<_,_>) = mapReq req >>= (fun req -> service req)
+    let fromMapReq mapReq : Filter<_,_,_,_> = fun req (service:Service<_,_>) -> mapReq req >>= (fun req -> service req)
 
-    let fromMapReqSync mapReq req (service:Service<_,_>) = req |> mapReq |> service
+    let fromMapReqSync mapReq : Filter<_,_,_,_> = fun req (service:Service<_,_>) -> req |> mapReq |> service
 
-    let fromMapRes mapRes req (service:Service<_,_>) = service req >>= (fun res -> mapRes res)
+    let fromMapRes mapRes : Filter<_,_,_,_> = fun req (service:Service<_,_>) -> service req >>= (fun res -> mapRes res)
         
-    let private beforeAfterSync before after req (service:Service<_,_>) = async { 
-        do before req
-        let! res = service req
-        do after (req,res)
-        return res }                       
+    let beforeAfterSync (before:'Req -> unit) (after:('Req * 'Res) -> unit) : Filter<_,_,_,_> =
+        fun req (service:Service<_,_>) -> async { 
+            do before req
+            let! res = service req
+            do after (req,res)
+            return res }                       
 
-    let timeOut ts req (service:Service<_,_>) = req |> service |> Async.timeoutAfter ts
+    let timeOut (ts:System.TimeSpan) : Filter<_,_,_,_> = fun req (service:Service<_,_>) -> req |> service |> Async.timeoutAfter ts
 
     let timeOutMs ms = timeOut (System.TimeSpan.FromMilliseconds(ms))
 
-    let printfnF req service = beforeAfterSync (fun _ -> printfn "before") (fun _ -> printfn "after") req service
+    let printfnF : Filter<_,_,_,_> = fun req service -> beforeAfterSync (fun _ -> printfn "before") (fun _ -> printfn "after") req service
 
-    let toService (service:Service<_,_>) (filter:Filter<_,_,_,_>) = fun req -> service |> (filter req)
+    let toService (service:Service<_,_>) (filter:Filter<_,_,_,_>) : Service<_,_> = fun req -> filter req service
 
     let handleEx succf errf req (service:Service<_,_>) = async {
             try

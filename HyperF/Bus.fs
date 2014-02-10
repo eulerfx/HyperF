@@ -17,7 +17,6 @@ type MessageSink = MessageService<unit>
 
 
 
-
 type Sink<'Req> = Service<'Req, unit>
 
 module Sink =
@@ -59,7 +58,16 @@ module Routing =
 
     let append (a:Route<_>) (b:Route<_>) : Route<_> = fun m -> a m |> Option.orElse (b m)
 
-   
+    let toService (r:Route<'res>) : MessageService<'res> =
+        
+        let failService : MessageService<'res> = 
+            fun msg ->
+                failwith (sprintf "Unable to find handler for message type %O" msg.payloadType)
+                Async.returnM (Unchecked.defaultof<'res>)
+
+        fun msg -> 
+            let service = msg |> r |> Option.getOrElse failService
+            msg |> service
 
     module Match =
 
@@ -93,9 +101,10 @@ module Transport =
     
     /// A message in the transport layer.
     type TransportMessage = {
-        headers: Map<string, string>
-        topic: string
-        body: byte[] 
+        headers : Map<string, string>
+        topic   : string
+        replyTo : string
+        body    : byte[] 
     }
 
     type Encoder = Message -> TransportMessage
@@ -106,14 +115,15 @@ module Transport =
 
 
 
+
+
 type IQuery<'TResult> = interface end
 
+type QueryService<'Query, 'Res when 'Query :> IQuery<'Res>> = Service<'Query, 'Res>
 
 module Query =
-
-    type QueryService<'Query, 'Res when 'Query :> IQuery<'Res>> = Service<'Query, 'Res>
-
-    let asMessageService (s:QueryService<'Query, 'Res>) : MessageService = 
+    
+    let private toMessageService (s:QueryService<'Query, 'Res>) : MessageService = 
         fun (msg:Message) -> async {
             let query = msg.payload :?> 'Query
             let! res = query |> s
@@ -126,7 +136,7 @@ module Query =
         }
 
     let asRoute (s:QueryService<'Query, 'Res>) =     
-        let msgService = s |> asMessageService
+        let msgService = s |> toMessageService
         let isQuery = Routing.Is.EQ (typeof<'Query>)
         Routing.Match.onPayloadType isQuery msgService
 
@@ -135,7 +145,7 @@ module Query =
 
 /// A transducer (saga = workflow = process manager = aggregate = projection)
 type Transducer<'State, 'In, 'Out> = {
-    transition : 'State -> 'In -> ('State * 'Out) // state monad
+    transition : 'In -> 'State -> ('State * 'Out) // state monad
     zero       : 'State
     apply      : 'Out -> 'State -> 'State
 }

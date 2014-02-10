@@ -104,7 +104,7 @@ module HttpFilter =
             HttpRes.fromMediaTypeAndStream MediaType
 
         let dynamic = 
-            Filter.fromMap 
+            Filter.fromMaps 
                 (fun (req:HttpReq) -> async { let! decoded = decodeDynamic req in return (req,decoded) }) 
                 (fun (res:obj) -> res |> HttpRes.json)
 

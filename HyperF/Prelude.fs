@@ -56,7 +56,9 @@ module Option =
             | None -> None
         | None -> None
 
-    let getOrElse def = function Some v -> v | None -> def
+    //let getOrElse def = function Some v -> v | None -> def
+
+    let getOrElse (defaultValue:'a) = function Some v -> v | None -> defaultValue
 
 
 module Operators =

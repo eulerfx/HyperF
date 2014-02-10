@@ -8,7 +8,7 @@ module BasicSample =
     let run() =
 
         let routes = [
-            
+             
             Get("/get_v3/:id") => fun _ -> HttpRes.plainText "GETv3"
 
             Get("/get_v3_bind/:id") => (^) (fun (req,ri,model:int) -> HttpRes.plainText (sprintf "GETv3 bind %i" model))
