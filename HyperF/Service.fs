@@ -43,7 +43,7 @@ module Filter =
 
     let timeOutMs ms = timeOut (System.TimeSpan.FromMilliseconds(ms))
 
-    let printfnF : Filter<_,_,_,_> = fun req service -> beforeAfterSync (fun _ -> printfn "before") (fun _ -> printfn "after") req service
+    let printBeforeAfterTag : Filter<_,_,_,_> = fun req service -> beforeAfterSync (fun _ -> printfn "before") (fun _ -> printfn "after") req service
 
     let toService (service:Service<_,_>) (filter:Filter<_,_,_,_>) : Service<_,_> = fun req -> filter req service
 

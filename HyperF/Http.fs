@@ -25,6 +25,15 @@ module HttpRes =
         
         return res }
 
+//    let trace (req:HttpReq) = async {
+//        let! stream = req.Content.ReadAsStreamAsync() |> Async.AwaitTask
+//        let res = new HttpResponseMessage(HttpStatusCode.OK)
+//        res.RequestMessage <- req
+//        req.Content.Headers.ContentType.MediaType <- "message/http"
+//        res.Content <- new StreamContent(stream |> IO.echo)        
+//        return res
+//    }
+
     let fromMediaTypeAndStream (mediaType:string) (stream:Stream) = async {
         let res = new HttpResponseMessage(HttpStatusCode.OK)
         let content = new StreamContent(stream)

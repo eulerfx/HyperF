@@ -28,14 +28,12 @@ module BasicSample =
 
             All => (fun _ -> HttpRes.plainText "ALL")
         ] 
-    
-        //let nested = routes |> Route.nest (Sub("/parent"))
 
         let routeService = routes |> Route.toService
 
         let service = 
             Filter.identity 
-            |> Filter.andThen Filter.printfnF
+            |> Filter.andThen Filter.printBeforeAfterTag
             |> Filter.toService routeService
 
         Http.host "http://+:8081/" service |> Async.RunSynchronously
