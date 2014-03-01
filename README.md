@@ -40,7 +40,7 @@ let routes = [
 
     Get("/echo_id/:id") => (^) (fun (req,ri,model:int) -> HttpRes.plainText (sprintf "id=%i" model))
 
-    Post("/get_v3/:id") => 
+    Post("/post/:id") => 
         fun _ -> async {
             do! Async.Sleep(1000)
             return! HttpRes.plainText "post" }
@@ -54,14 +54,12 @@ let routes = [
     All => (fun _ -> HttpRes.plainText "*")
 ] 
 
-let routeService = routes |> Route.toService
-
-let service = 
+let httpService = 
     Filter.identity 
-    |> Filter.andThen Filter.printBeforeAfterTag
-    |> Filter.toService routeService
+    |> Filter.andThen Filters.printBeforeAfterTag
+    |> Filter.toService (routes |> Route.toService)
 
-Http.host "http://+:8081/" service |> Async.RunSynchronously
+Http.host "http://+:8081/" httpService |> Async.RunSynchronously
 ```
 
 Services are hosted via ```System.Net.HttpListener```.
