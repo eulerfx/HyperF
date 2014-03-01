@@ -3,7 +3,7 @@ HyperF
 
 F# async service framework inspired in part by [Your server as a function](http://monkey.org/~marius/funsrv.pdf). The framework provides combinators for implementing various service interaction patterns.
 
-## Central abstractions
+## Central Abstractions
 
 ### Service
 
@@ -11,20 +11,22 @@ F# async service framework inspired in part by [Your server as a function](http:
 type Service<'Req, 'Res> = 'Req -> Async<'Res>
 ```
 
+A service is a function from a request onto an asynchronous response. A service and a service client are symmetric - expressed by the same interface.
+
 ### Filter
 
 ```
 type Filter<'Req, 'ReqInner, 'ResInner, 'Res> = 'Req -> Service<'ReqInner, 'ResInner> -> Async<'Res>
 ```
 
-Filters can be interpretted as Kleisli arrows onto the continuation monad and therefore they composed via Kleisli composition.
+Filters compose and they allow interception of service requests and responses. They can be used to implement various cross-cutting concerns, such as authentication, logging, metrics, serialization, etc. Filters can be interpretted as Kleisli arrows onto the continuation monad and therefore they compose via Kleisli composition.
 
 
 ## Modules
 
 ### HTTP Module
 
-The HTTP module contains combinators for an HTTP service carried by ```System.Net.Http```.
+The HTTP module contains combinators for HTTP services carried by message types in ```System.Net.Http```.
 
 ```
 #r "HyperF.dll"
@@ -62,11 +64,11 @@ let service =
 Http.host "http://+:8081/" service |> Async.RunSynchronously
 ```
 
-Services are hosted via ```System.Net,HttpListener```.
+Services are hosted via ```System.Net.HttpListener```.
 
 ### Bus Module
 
-The bus module contains combinators to support various messaging patters, such as pub/sub, request/reply, query/response, fire and forget, process managers (sagas).
+The bus module contains combinators to support various messaging patters, such as pub/sub, request/reply, query/response, fire and forget, process managers (sagas), etc.
 
 
 ## Central Abstractions
