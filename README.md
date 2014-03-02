@@ -7,7 +7,7 @@ F# async service framework inspired in part by [Your server as a function](http:
 
 ### Service
 
-```
+```fsharp
 type Service<'Req, 'Res> = 'Req -> Async<'Res>
 ```
 
@@ -15,7 +15,7 @@ A service is a function from a request onto an asynchronous response. A service 
 
 ### Filter
 
-```
+```fsharp
 type Filter<'Req, 'ReqInner, 'ResInner, 'Res> = 'Req -> Service<'ReqInner, 'ResInner> -> Async<'Res>
 ```
 
@@ -28,7 +28,7 @@ Filters compose and they allow interception of service requests and responses. T
 
 The HTTP module contains combinators for HTTP services carried by message types in ```System.Net.Http```.
 
-```
+```fsharp
 #r "HyperF.dll"
 
 open Http
@@ -73,7 +73,7 @@ The bus module contains combinators to support various messaging patters, such a
 
 ### Message Service
 
-```
+```fsharp
 type MessageService<'res> = Service<Message, 'res>
 
 type MessageService = MessageService<Message>
