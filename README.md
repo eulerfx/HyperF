@@ -66,7 +66,7 @@ Services are hosted via ```System.Net.HttpListener```.
 
 #### Routing
 
-```
+```fsharp
 type Route = HttpReq -> Async<HttpResp> option
 ```
 
