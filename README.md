@@ -64,6 +64,15 @@ Http.host "http://+:8081/" httpService |> Async.RunSynchronously
 
 Services are hosted via ```System.Net.HttpListener```.
 
+#### Routing
+
+```
+type Route = HttpReq -> Async<HttpResp> option
+```
+
+A route is represented simlarly to a service with the exception that a response may or may not be provided depending on whether the route criteria were matched. Routes are typically declared as a combination of a match criteria and a service. Routing multiplexes HTTP requests into finer grained services. Routes form monoids and as such can be combined. Finally, given a catch-all route, such as an HTTP 404 route, routes are combined into services. 
+
+
 ### Bus Module
 
 The bus module contains combinators to support various messaging patters, such as pub/sub, request/reply, query/response, fire and forget, process managers (sagas), etc.
