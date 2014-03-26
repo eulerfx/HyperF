@@ -1,7 +1,7 @@
 HyperF
 ======
 
-F# async service framework inspired in part by [Your server as a function](http://monkey.org/~marius/funsrv.pdf). The framework provides combinators for implementing various service interaction patterns.
+F# async service framework __prototype__ inspired in part by [Your server as a function](http://monkey.org/~marius/funsrv.pdf). The framework provides combinators for implementing various service interaction patterns.
 
 ## Central Abstractions
 

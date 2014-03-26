@@ -102,7 +102,7 @@ module Route =
         let isMatch = patternToMatch pat
         fromMatch isMatch service
 
-    /// converts a set of routes into a serivce given an escape hatch result.
+    /// converts a set of routes into a serivce given an "escape hatch" result.
     let private toServiceCont cont routes =        
         let route = routes |> Seq.map patternToRoute |> Seq.fold append identity
         fun (req:HttpReq) ->
