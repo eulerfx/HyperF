@@ -62,6 +62,7 @@
     <Compile Include="Async.fs" />
     <Compile Include="Service.fs" />
     <Compile Include="IO.fs" />
+    <Compile Include="Stream.fs" />
     <Compile Include="Http.fs" />
     <Compile Include="Http.RoutePattern.fs" />
     <Compile Include="Http.Route.fs" />
