@@ -9,7 +9,9 @@ module AsyncEx =
 
     type Async with
     
-        static member returnA a = async { return a }
+        static member unit = async.Return(())
+
+        static member returnA a = async.Return(a)
 
         static member parAp (f:Async<'a -> 'b>) (a:Async<'a>) = async {
             let! f = Async.StartChild f

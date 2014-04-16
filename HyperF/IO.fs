@@ -4,26 +4,6 @@ open System.IO
 
 module IO =
     
-    type IO<'a> = IO of (unit -> 'a)
-
-    let returnIO = IO
-
-    let unitIO = returnIO (fun () -> ())
-
-    let run io = let (IO(value)) = io in value()
-
-    let bind (a:IO<'a>) (k:'a -> IO<'b>) = let a = run a in k a
-
-    let map f (a:IO<'a>) = let a = run a in f a |> returnIO
-
-    let product a b = returnIO <| fun () -> let a = run a in let b = run b in a,b
-
-    let ap (f:IO<('a -> 'b)>) (a:IO<'a>) = 
-        let (IO(f)) = product f a in
-        returnIO <| fun () -> let (f,a) = f() in f a
-
-    let readFileText path = returnIO <| fun () -> File.ReadAllText(path)
-
     let copyTo (source:Stream) (sink:Stream) = source.CopyToAsync(sink) |> Async.AwaitIAsyncResult |> Async.Ignore
 
     let readToString (stream:Stream) = async {
