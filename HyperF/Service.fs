@@ -1,16 +1,10 @@
 ﻿namespace HyperF
 
-// based on: "Your Server as a Function" http://monkey.org/~marius/funsrv.pdf
-
 type Service<'Req, 'Res> = 'Req -> Async<'Res>
 
-
-/// A service filter - Kleisli arrow (to continuation monad of service).
 type Filter<'Req, 'ReqInner, 'ResInner, 'Res> = 'Req -> Service<'ReqInner, 'ResInner> -> Async<'Res>
 
-
 type Filter<'Req, 'Res> = 'Req -> Service<'Req, 'Res> -> Async<'Res>
-
 
 module Filter =
 
