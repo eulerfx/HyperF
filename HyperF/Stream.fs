@@ -98,6 +98,8 @@ module Machine =
 
     let unit a = emit (Seq.singleton a)
 
+    let yieldHalt (a:Async<unit>) = a |> Async.map (fun _ -> Stop) |> Yield
+
     let rec append (p1:Machine<'a, 'b>) (p2:Machine<'a, 'b>) =
         match p1 with
         | Stop -> p2

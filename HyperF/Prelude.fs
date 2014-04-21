@@ -9,12 +9,30 @@ module Prelude =
 
     let tuple a b = (a,b)
 
+    let rec Y f = fun a -> f (Y f) a
+
+    let rec Y2 f = fun a b -> f (Y2 f) a b
+
+    let rec fib n = 
+        if n = 0 then 0
+        elif n = 1 then 1
+        else fib (n - 1) + fib (n - 2)
+
+    let fib2 = Y (fun f n -> if n = 0 then 0 elif n = 1 then 1 else f (n - 1) + f (n - 2))
+
+    let fac = Y (fun f -> function 0 -> 1 | n -> n * f (n - 1))
+    
+    type Rec<'a> = Rec of (Rec<'a> -> 'a)
+
+    let Y_2 f =
+        let f' (Rec x as rx) = f (fun a -> x rx a)
+        f' (Rec f')
+
 
 type Continuation<'a,'r> = ('a  -> 'r) -> 'r
 
 module Continuation =     
 
-    // based on Haskell implementation from "The Essence of Functional Programming" http://www.eliza.ch/doc/wadler92essence_of_FP.pdf
     let bind (m:Continuation<'a, 'r>) k c = m (fun a -> k a c)
 
 
@@ -74,7 +92,7 @@ module Operators =
     let inline applyM (builder1:^M1) (builder2:^M2) f m =
         bindM builder1 f <| fun f' -> bindM builder2 m <| fun m' -> returnM builder2 (f' m') 
 
-
+/// Async module copied from https://github.com/fsprojects/fsharpx
 module Async =
 
     open Operators
@@ -121,3 +139,35 @@ module Async =
 //        List.foldBack cons s (returnM [])
 //
 //    let inline mapM f x = sequence (List.map f x)
+
+
+
+open System.Threading
+
+type BlockingRingBufferQueue<'a>(capacity:int) =
+    
+    let buffer : 'a[] = Array.zeroCreate capacity
+    let wp = ref -1
+    let rp = ref 0
+
+    let readLatch = new ManualResetEventSlim()
+    let writeLatch = new ManualResetEventSlim()
+
+    let rec add a = async {
+        if (Interlocked.Increment(wp) < capacity) then 
+            buffer.[!wp] <- a
+            readLatch.Set()
+            return ()
+        else
+            wp := -1
+            do! Async.AwaitWaitHandle(writeLatch.WaitHandle) |> Async.Ignore
+            return! add a }
+
+    let rec dequeue () = async {
+        if (Interlocked.Increment(rp) < !wp) then            
+            writeLatch.Set()
+            return buffer.[!rp]            
+        else 
+            do! Async.AwaitWaitHandle(readLatch.WaitHandle) |> Async.Ignore
+            return! dequeue () }
+
