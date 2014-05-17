@@ -41,10 +41,6 @@
       <HintPath>..\packages\FSharp.Dynamic.1.4.2.0\lib\net40\FSharp.Dynamic.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="FSharpx.Core">
-      <HintPath>..\packages\FSharpx.Core.1.8.41\lib\40\FSharpx.Core.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
       <Private>True</Private>
@@ -61,14 +57,16 @@
     <Compile Include="Prelude.fs" />
     <Compile Include="Disruptor.fs" />
     <Compile Include="Async.fs" />
+    <Compile Include="AsyncSeq.fs" />
+    <Compile Include="Stream.fs" />
     <Compile Include="Service.fs" />
     <Compile Include="IO.fs" />
-    <Compile Include="Stream.fs" />
     <Compile Include="Http.fs" />
     <Compile Include="Http.RoutePattern.fs" />
     <Compile Include="Http.Route.fs" />
     <Compile Include="Bus.fs" />
     <None Include="packages.config" />
+    <None Include="app.config" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>

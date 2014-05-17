@@ -74,7 +74,6 @@ module SeqStream =
 
 module AsyncSeqStream =
 
-    open FSharp.Control
     open System.Threading.Tasks
        
     /// Reads a specified number of values from an enumeration into a buffer array.

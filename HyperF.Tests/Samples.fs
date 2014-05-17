@@ -43,7 +43,6 @@ module AsyncStreamSample =
 
     open System
     open System.Text
-    open FSharp.Control
     open EkonBenefits.FSharp.Dynamic
 
     let run() =
@@ -74,8 +73,6 @@ module DbAccessSample =
     open System.Text
     open System.Data
     open System.Data.SqlClient
-
-    open FSharp.Control
 
     let readDataRecords (cmd:SqlCommand) = asyncSeq {
         let! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
