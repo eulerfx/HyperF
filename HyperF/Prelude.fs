@@ -142,32 +142,4 @@ module Async =
 
 
 
-open System.Threading
-
-type BlockingRingBufferQueue<'a>(capacity:int) =
-    
-    let buffer : 'a[] = Array.zeroCreate capacity
-    let wp = ref -1
-    let rp = ref 0
-
-    let readLatch = new ManualResetEventSlim()
-    let writeLatch = new ManualResetEventSlim()
-
-    let rec add a = async {
-        if (Interlocked.Increment(wp) < capacity) then 
-            buffer.[!wp] <- a
-            readLatch.Set()
-            return ()
-        else
-            wp := -1
-            do! Async.AwaitWaitHandle(writeLatch.WaitHandle) |> Async.Ignore
-            return! add a }
-
-    let rec dequeue () = async {
-        if (Interlocked.Increment(rp) < !wp) then            
-            writeLatch.Set()
-            return buffer.[!rp]            
-        else 
-            do! Async.AwaitWaitHandle(readLatch.WaitHandle) |> Async.Ignore
-            return! dequeue () }
 
