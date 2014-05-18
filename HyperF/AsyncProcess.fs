@@ -1,5 +1,7 @@
 ﻿namespace HyperF
 
+open HyperF
+
 type AsyncProcess<'a, 'b> = Async<AsyncStep<'a, 'b>>
 
 and AsyncStep<'a, 'b> =
@@ -12,19 +14,24 @@ type Source<'a> = AsyncProcess<unit, 'a>
 
 type Sink<'a> = AsyncProcess<'a, unit>
 
-type Channel<'a, 'b> = AsyncProcess<'a, 'a -> AsyncProcess<'a, 'b>>
 
 module AsyncProcess =
     
     [<GeneralizableValue>]
     let stop<'a, 'b> : AsyncProcess<'a, 'b> = Stop |> async.Return
 
-    let emit b : AsyncProcess<'a, 'b> = Emit(b, stop) |> async.Return
+    let emit b tp : AsyncProcess<'a, 'b> = Emit(b, tp) |> async.Return
 
-    let rec map (f:'b -> 'c) = function
-        | Stop -> Stop
-        | Emit (h,t) -> Emit (f h, t |> Async.map (map f))
-        | Await recv -> Await (recv >> Async.map (map f))
+    let emitOne b : AsyncProcess<'a, 'b> = emit b stop
+
+    let await (f:'a -> AsyncProcess<'a, 'b>) = Await f |> async.Return
+
+    let rec map (f:'b -> 'c) (p:AsyncProcess<'a, 'b>) : AsyncProcess<'a, 'c> = async {
+        let! p = p
+        match p with
+        | Stop -> return Stop
+        | Emit (h,t) -> return Emit (f h, t |> map f)
+        | Await recv -> return Await (recv >> map f) }
 
     let rec append (p1:AsyncProcess<'a, 'b>) (p2:AsyncProcess<'a, 'b>) : AsyncProcess<'a, 'b> = async {
         let! p1 = p1
@@ -81,9 +88,12 @@ module AsyncProcess =
             | Await recv -> return Await (recv >> loop) }
         loop p
 
-    let lift (f:'a -> 'b) : AsyncProcess<'a, 'b> = Await (f >> emit) |> async.Return |> repeat
+    let lift (f:'a -> 'b) : AsyncProcess<'a, 'b> = Await (f >> emitOne) |> async.Return |> repeat
 
-    let liftAsync (f:'a -> Async<'b>) : AsyncProcess<'a, 'b> = Await (f >> Async.bind (emit >> repeat)) |> async.Return
+    [<GeneralizableValue>]
+    let id<'a> : AsyncProcess<'a, 'a> = lift id
+
+    let liftAsync (f:'a -> Async<'b>) : AsyncProcess<'a, 'b> = Await (f >> Async.bind (emitOne >> repeat)) |> async.Return
 
     let rec sink (f:'a -> Async<unit>) : Sink<'a> = Await (f >> Async.bind (fun _ -> sink f)) |> async.Return
 
@@ -101,7 +111,7 @@ module AsyncProcess =
 
 
     type AsyncProcessBuilder() =
-        member x.Yield(b) = emit b
+        member x.Yield(b) = emitOne b
         member x.Return(()) = stop
         member x.YieldFrom(s) = s
         member x.Zero() = stop
@@ -113,6 +123,25 @@ module AsyncProcess =
         member x.Delay (f:unit -> AsyncProcess<'a, 'b>) = async.Delay(f)
             
     let asyncProc = new AsyncProcessBuilder()    
+
+
+    let rec loop (s:'s) (f:'a -> 's -> 'b * 's) : AsyncProcess<'a, 'b> =
+        await (fun a -> let b,s' = f a s in emit b (loop s' f))
+
+    [<GeneralizableValue>]
+    let count<'a> : AsyncProcess<'a, int> = loop 0 (fun _ c -> let c' = c + 1 in c',c')
+
+    let sum : AsyncProcess<_, _> = 
+        let rec go acc = 
+            await (fun x -> let sum = x + acc in emit sum (go sum))
+        go 0
+    
+    let map2 (p1:AsyncProcess<'a, 'b>) (p2:AsyncProcess<'a, 'c>) (f:'b -> 'c -> 'd) : AsyncProcess<'a, 'd> =
+        p1 |> bind (fun b -> p2 |> map (fun c -> f b c))
+
+    let zip (p1:AsyncProcess<'a, 'b>) (p2:AsyncProcess<'a, 'c>) : AsyncProcess<'a, 'b * 'c> = map2 p1 p2 (fun b c -> b,c)
+
+    let zipWithIndex (p:AsyncProcess<'a, 'b>) : AsyncProcess<'a, 'b * int> = zip p count
 
     let rec applyList (ls:list<'a>) (p:AsyncProcess<'a, 'b>) = async {
         let! p = p

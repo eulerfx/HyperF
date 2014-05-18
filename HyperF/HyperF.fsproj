@@ -58,7 +58,8 @@
     <Compile Include="Disruptor.fs" />
     <Compile Include="Async.fs" />
     <Compile Include="AsyncSeq.fs" />
-    <Compile Include="Stream.fs" />
+    <Compile Include="AsyncProcess.fs" />
+    <None Include="AsyncProcess.fsx" />
     <Compile Include="Service.fs" />
     <Compile Include="IO.fs" />
     <Compile Include="Http.fs" />
