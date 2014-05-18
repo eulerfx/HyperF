@@ -474,6 +474,48 @@ module AsyncSeq =
         else return! input }
 
 
+    let rec map2 (s1:AsyncSeq<'a>) (s2:AsyncSeq<'b>) (f:'a -> 'b -> 'c) : AsyncSeq<'c> = async {
+        let! s1 = Async.StartChild s1
+        let! s2 = s2
+        let! s1 = s1
+        match s1,s2 with
+        | Cons (h1,t1), Cons (h2,t2) -> return Cons(f h1 h2, map2 t1 t2 f)
+        | _ -> return Nil }
+
+    let rec ap (sf:AsyncSeq<'a -> 'b>) (s:AsyncSeq<'a>) : AsyncSeq<'b> = map2 sf s (fun f a -> f a)
+
+    let buffer (n:int) (s:AsyncSeq<'a>) : AsyncSeq<'a[]> =
+        let rec loop s (buffer:ResizeArray<'a>) = asyncSeq {
+            if (buffer.Count = n) then
+                yield buffer.ToArray()
+                yield! loop s (new ResizeArray<_>(n))
+            else
+                let! s = s
+                match s with
+                | Cons(h,t) ->
+                    buffer.Add(h)
+                    yield! loop t buffer
+                | Nil ->
+                    if (buffer.Count > 0) then 
+                        yield buffer.ToArray()
+        }
+        loop s (new ResizeArray<_>(n))        
+
+    
+    let buffered (size:int) (s:AsyncSeq<'a>) : AsyncSeq<'a> = async {
+        use buffer = new System.Collections.Concurrent.BlockingCollection<'a>(size)
+        let rec reader s = async {
+            let! s = s
+            match s with
+            | Cons (h,t) ->
+                buffer.Add(h)
+                return! reader t
+            | Nil ->
+                buffer.CompleteAdding()
+                return () }
+        Async.Start (reader s)
+        return! buffer.GetConsumingEnumerable() |> ofSeq }
+
 
     /// Interleaves two async sequences.
     let interleave = 

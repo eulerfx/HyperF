@@ -79,6 +79,30 @@ module Option =
     let getOrElse (defaultValue:'a) = function Some v -> v | None -> defaultValue
 
 
+type These<'a, 'b> =
+    | This of 'a
+    | That of 'b
+    | Both of 'a * 'b
+
+module These =
+    
+    let bimap f g = function
+        | This a -> This (f a)
+        | That b -> That (g b)
+        | Both (a,b) -> Both (f a, g b)
+
+    let mapThis f = function
+        | This a -> This (f a)
+        | That b -> That b
+        | Both (a,b) -> Both (f a,b)
+    
+    let mapThat g = function
+        | This a -> This a
+        | That b -> That (g b)
+        | Both (a,b) -> Both (a,g b)
+    
+
+
 module Operators =
 
     let inline returnM builder x = (^M: (member Return: 'b -> 'c) (builder, x))
