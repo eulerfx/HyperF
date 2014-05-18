@@ -60,6 +60,7 @@
     <Compile Include="AsyncSeq.fs" />
     <Compile Include="AsyncProcess.fs" />
     <None Include="AsyncProcess.fsx" />
+    <Compile Include="Machine.fs" />
     <Compile Include="Service.fs" />
     <Compile Include="IO.fs" />
     <Compile Include="Http.fs" />
